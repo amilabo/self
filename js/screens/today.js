@@ -56,9 +56,12 @@ function eveningCard(today, after) {
   const step = S.ui.evening_step && S.ui.evening_step.date === today ? S.ui.evening_step.step : 1;
   const open = () => go(eveningHash(today, ev ? step : 1));
   if (ev && ev.completed_at) {
-    return card('gap-8',
+    // Завершённый круг можно изменить, пока идёт его логический день (до 04:00), — как утро.
+    // Статус — время первого завершения (completed_at не меняется при правке).
+    return h('a', { href: eveningHash(today, 1), class: 'card card-link gap-8', 'data-fk': 'evening-edit' },
       h('div', { class: 'row-center' }, h('div', { class: 'overline' }, T.today.eveningOverline), doneStatus(ev.completed_at)),
-      h('div', { class: 'h3' }, T.today.eveningTitle));
+      h('div', { class: 'h3' }, T.today.eveningTitle),
+      actionLine(T.today.eveningEdit));
   }
   if (ev && ev.crisis) {
     // Вечер с «Кризисом» засчитан, круг можно не заканчивать, но можно и вернуться к записи.

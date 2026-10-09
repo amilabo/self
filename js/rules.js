@@ -3,7 +3,7 @@
 // ничего не пишут. Поэтому их можно проверять автотестами (tests/rules.test.mjs).
 
 import { addDays, diffDays, dayNumber, logicalDayStart, logicalDateOfIso, weekdayShort } from './dates.js';
-import { EXPERIMENT_LENGTH, GOOD_LOW_MOOD_MAX, QUESTION_SET_VERSION } from './content.js';
+import { EXPERIMENT_LENGTH, GOOD_LOW_MOOD_MAX, QUESTION_SET_VERSION, OTHER } from './content.js';
 
 // H1: вечер засчитан, если круг завершён или в нём было окно «Кризис».
 export function isCounted(ev) {
@@ -80,6 +80,7 @@ export function newEvening(date, nowIso) {
     started_at: nowIso,
     completed_at: null,
     updated_at: nowIso,
+    edited_at: null,
     filled_later: false,
     crisis: false,
     mood: null,
@@ -100,6 +101,88 @@ export function newEvening(date, nowIso) {
 // filled_later: круг завершён позже конца логического дня (date + 1, 04:00).
 export function isFilledLater(date, completedIso) {
   return new Date(completedIso).getTime() > logicalDayStart(addDays(date, 1)).getTime();
+}
+
+// --- Завершение и правка круга ---
+
+// Завершённый круг можно изменить, пока идёт его логический день (до 04:00 следующих суток).
+export function canEditEvening(ev, today) {
+  return !!ev && ev.completed_at != null && ev.date === today;
+}
+
+// «Завершить круг»: первое завершение ставит completed_at и filled_later, повторное (после правки)
+// их не трогает — H1, filled_later и замер H3 считаются от первого завершения.
+// Производные флаги пересчитываются каждый раз. morning — утренняя запись того же дня или null.
+export function finishEvening(ev, { nowIso, morning }) {
+  const first = ev.completed_at == null;
+  if (first) {
+    ev.completed_at = nowIso;
+    ev.filled_later = isFilledLater(ev.date, nowIso);
+  }
+  if (!(morning && morning.intention)) ev.intention_result = null;
+  if (ev.abc) {
+    if (!nonEmpty(ev.abc.e_belief)) ev.abc.c_emotions.forEach((e) => { e.after = null; });
+    ev.abc_done = abcDone(ev.abc);
+    ev.de_done = deDone(ev.abc);
+  } else {
+    ev.abc_done = false;
+    ev.de_done = false;
+  }
+  if (ev.crisis) { ev.friction = null; ev.now_vs_start = null; }
+  return { first };
+}
+
+// Отпечаток содержания вечера без служебных отметок времени и замера: по нему видно,
+// изменилось ли что-то в завершённом круге.
+export function eveningPrint(ev) {
+  const { updated_at, edited_at, timing, ...rest } = ev;
+  return JSON.stringify(rest);
+}
+
+// Отметки времени при сохранении вечера. prevPrint — отпечаток при прошлом сохранении
+// завершённого вечера (undefined — вечер ещё не сохранялся завершённым). Возвращает новый отпечаток.
+// Черновик: updated_at при каждом сохранении. Первое завершение: только updated_at.
+// Правка после завершения: updated_at и edited_at, но только если содержание изменилось.
+export function stampEvening(ev, prevPrint, nowIso) {
+  if (ev.completed_at == null) { ev.updated_at = nowIso; return undefined; }
+  const p = eveningPrint(ev);
+  if (prevPrint === undefined) { ev.updated_at = nowIso; return p; }
+  if (p !== prevPrint) { ev.updated_at = nowIso; ev.edited_at = nowIso; }
+  return p;
+}
+
+// Снимок обязательных ответов завершённого круга перед правкой.
+export function editBase(ev) {
+  const other = ev.abc && (ev.abc.c_emotions || []).find((e) => e.name === OTHER);
+  return {
+    date: ev.date,
+    friction: ev.friction ? { reasons: [...ev.friction.reasons], other_text: ev.friction.other_text } : null,
+    emotion_other_text: other ? other.other_text : null
+  };
+}
+
+// Из правки вышли, не нажав «Завершить круг» (правки уже записаны): обязательные ответы
+// завершённого круга не должны пропасть. «Что мешало» без ответа — возвращается прежний ответ;
+// «другое» в эмоциях без уточнения — прежнее уточнение, а если его не было, «другое» снимается.
+// В вечер с «Кризисом» обязательных полей нет. Возвращает true, если что-то восстановлено.
+export function restoreRequired(ev, base) {
+  if (!ev || ev.completed_at == null || ev.crisis) return false;
+  let fixed = false;
+  const f = ev.friction;
+  const frictionBad = !f || !f.reasons.length || (f.reasons.includes(OTHER) && !nonEmpty(f.other_text));
+  if (frictionBad && base && base.friction) {
+    ev.friction = { reasons: [...base.friction.reasons], other_text: base.friction.other_text };
+    fixed = true;
+  }
+  const emo = ev.abc && ev.abc.c_emotions;
+  const other = emo && emo.find((e) => e.name === OTHER);
+  if (other && !nonEmpty(other.other_text)) {
+    if (base && nonEmpty(base.emotion_other_text)) other.other_text = base.emotion_other_text;
+    else ev.abc.c_emotions = emo.filter((e) => e !== other);
+    ev.abc_done = abcDone(ev.abc);
+    fixed = true;
+  }
+  return fixed;
 }
 
 export function lastExport(snap) {

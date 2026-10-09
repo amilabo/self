@@ -5,7 +5,7 @@
 
 export const QUESTION_SET_VERSION = 3; // v3 (2026-10-09): тесты GAD-7 и Эллиса в форме; v2 — новый список привычек
 export const SCHEMA_VERSION = 1;
-export const APP_VERSION = '0.1.4';
+export const APP_VERSION = '0.1.5';
 export const EXPORT_FORMAT = 'self-reflection-export';
 export const EXPERIMENT_LENGTH = 21;
 export const DAY_BOUNDARY = '04:00';
@@ -231,6 +231,7 @@ export const T = {
     eveningContinue: 'Продолжить',
     eveningCounted: 'засчитан',
     eveningBackToRecord: 'Вернуться к записи',
+    eveningEdit: 'Изменить',
     eveningAfterText: 'Можно продолжать. Записи после дня 21 сохраняются, но в итоги эксперимента не входят.',
     finalOverline: 'Ретро',
     finalExportTitle: 'Итоговый экспорт к ретро',
@@ -370,7 +371,17 @@ export const T = {
     ellisNeedFile: 'Текст этого теста защищён авторским правом и не входит в форму. Загрузите файл теста (ellis-test.json): он останется только на этом телефоне и не попадёт в экспорт.',
     ellisLoad: 'Загрузить файл теста',
     ellisLoaded: 'Файл теста загружен.',
+    // Тест по паролю (0.1.5): в форме лежит только шифр, пароль знает владелец.
+    ellisNeedPass: 'Текст этого теста защищён авторским правом, поэтому в форме он зашифрован. Введите пароль теста: тест откроется и останется только на этом телефоне, в экспорт он не попадёт.',
+    ellisPassLabel: 'Пароль теста',
+    ellisOpen: 'Открыть тест',
+    ellisOpening: 'Открываю…',
+    ellisUseFile: 'Загрузить файл вместо пароля',
+    ellisUnlocked: 'Тест открыт.',
     ellisErr: {
+      password: 'Пароль не подошёл.',
+      broken: 'Не удалось открыть тест по паролю. Загрузите файл теста.',
+      nocrypto: 'Этот браузер не может открыть тест по паролю. Загрузите файл теста.',
       read: 'Не удалось прочитать файл. Выберите файл ellis-test.json.',
       format: 'Это не файл теста по модели Эллиса. Выберите файл ellis-test.json.',
       options: 'В файле теста должно быть 6 вариантов ответа. Проверьте файл.',

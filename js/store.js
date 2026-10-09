@@ -4,6 +4,7 @@
 import { openDb } from './db.js';
 import { HABITS } from './content.js';
 import { isoLocal } from './dates.js';
+import { stampEvening, eveningPrint } from './rules.js';
 
 export const S = {
   memoryOnly: false,
@@ -23,6 +24,9 @@ export const S = {
 
 let db = null;
 const pending = new Map();
+// Отпечатки содержания завершённых вечеров (date → строка): по ним правка после завершения
+// ставит edited_at, а сохранение без изменений не трогает updated_at.
+const prints = new Map();
 const DEBOUNCE_MS = 400;
 
 export const markKey = (date, habitId) => `${date}|${habitId}`;
@@ -67,6 +71,8 @@ async function readAll() {
   S.marks = new Map(marks.map((m) => [markKey(m.date, m.habit_id), m]));
   S.mornings = new Map(mornings.map((m) => [m.date, m]));
   S.evenings = new Map(evenings.map((e) => [e.date, e]));
+  prints.clear();
+  for (const e of evenings) if (e.completed_at != null) prints.set(e.date, eveningPrint(e));
   S.skips = new Map(skips.map((r) => [r.first_missed_date, r]));
   S.signals = signals;
   S.tests = tests;
@@ -117,8 +123,12 @@ export function saveMorning(m, { debounce = false } = {}) {
   return schedule(`m|${m.date}`, 'mornings', m, undefined, debounce);
 }
 
+// touch: false — только замер времени (сворачивание страницы), отметки времени не меняются.
 export function saveEvening(ev, { debounce = false, touch = true } = {}) {
-  if (touch) ev.updated_at = isoLocal();
+  if (touch) {
+    const p = stampEvening(ev, prints.get(ev.date), isoLocal());
+    if (p === undefined) prints.delete(ev.date); else prints.set(ev.date, p);
+  }
   S.evenings.set(ev.date, ev);
   return schedule(`e|${ev.date}`, 'evenings', ev, undefined, debounce);
 }

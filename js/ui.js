@@ -151,29 +151,30 @@ export function otherField({ id, value, placeholder, onInput, required = true })
     input, err);
 }
 
-// Слайдер силы 0–10 с состоянием «не оценено» (null): пунктирный трек без ползунка.
-export function strengthSlider({ label, value, ariaLabel, onSet, fk, emo }) {
-  const rated = typeof value === 'number';
-  const valueText = h('span', { class: rated ? 'slider-val rated' : 'slider-val' });
-  const input = h('input', {
-    type: 'range', min: '0', max: '10', step: '1', class: rated ? 'range' : 'range unrated',
-    'aria-label': ariaLabel, 'data-fk': fk, value: String(rated ? value : 5)
-  });
-  const show = (v) => {
-    const r = typeof v === 'number';
-    valueText.textContent = r ? T.step2.rated(v) : T.step2.unrated;
-    valueText.className = r ? 'slider-val rated' : 'slider-val';
-    input.className = r ? 'range' : 'range unrated';
-    input.setAttribute('aria-valuetext', r ? T.step2.rated(v) : T.step2.unratedAria);
+// Шкала силы 0–10 (вместо слайдера, 0.1.5): сетка 6 колонок, role="radiogroup".
+// Значение меняется только касанием кнопки (click), прокрутка по шкале ничего не выбирает.
+// Повторное касание выбранного снимает выбор: null — «не оценено», это не 0.
+// Экран целиком не перерисовывается: меняются только состояния кнопок и подпись справа.
+export function strengthScale({ label, value, ariaLabel, onSet, fk, emo }) {
+  let cur = typeof value === 'number' ? value : null;
+  const valueText = h('span', { class: 'strength-val' });
+  const cells = [];
+  const show = () => {
+    const r = cur != null;
+    valueText.textContent = r ? T.step2.rated(cur) : T.step2.unrated;
+    valueText.className = r ? 'strength-val rated' : 'strength-val';
+    cells.forEach((c, n) => c.setAttribute('aria-checked', n === cur ? 'true' : 'false'));
   };
-  const set = () => { const v = Number(input.value); show(v); onSet(v); };
-  input.addEventListener('input', set);
-  // Касание ровно в середину трека не меняет value и не даёт input — ставим значение по click.
-  input.addEventListener('click', set);
-  show(rated ? value : null);
-  return h('div', { class: 'stack-4' },
-    h('div', { class: 'slider-head' }, h('span', { class: 'slider-name', 'data-emo': emo }, label), valueText),
-    input);
+  for (let n = 0; n <= 10; n++) {
+    cells.push(h('button', {
+      type: 'button', role: 'radio', class: 'cell', 'data-fk': `${fk}-${n}`,
+      onclick: () => { cur = cur === n ? null : n; show(); onSet(cur); }
+    }, String(n)));
+  }
+  show();
+  return h('div', { class: 'stack-8' },
+    h('div', { class: 'strength-head', 'aria-hidden': 'true' }, h('span', { class: 'strength-name', 'data-emo': emo }, label), valueText),
+    h('div', { class: 'scale11', role: 'radiogroup', 'aria-label': ariaLabel }, cells));
 }
 
 // Шапка шага: «назад», «Шаг N из 3», полоса прогресса.

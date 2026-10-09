@@ -133,6 +133,7 @@ a.card-link { color: var(--text); text-decoration: none; }
 .btn-danger { background: var(--surface); color: var(--error); border: 1px solid var(--border); font-weight: 600; }
 .btn:disabled { background: var(--surface-muted); color: var(--text-tertiary); border: 0; cursor: default; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.link-btn { align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: none; border: 0; font-size: 14px; font-weight: 700; color: var(--accent); text-align: left; cursor: pointer; }
 
 /* Шкала 1–10 и сегменты */
 .scale { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
@@ -172,20 +173,13 @@ input.field[aria-invalid="true"] { padding: 0 11px; }
 .more-title { font-size: 14px; line-height: 1.4; font-weight: 700; }
 .more-btn .caption { font-weight: 400; }
 
-/* Слайдер 0–10 с состоянием «не оценено» */
-.slider-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; }
-.slider-name { font-weight: 600; }
-.slider-val { color: var(--text-secondary); }
-.slider-val.rated { font-weight: 700; color: var(--accent-strong); }
-.range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 44px; margin: 0; background: transparent; cursor: pointer; }
-.range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--border-control); }
-.range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--border-control); }
-.range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
-.range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
-.range.unrated::-webkit-slider-runnable-track { height: 0; border-top: 2px dashed var(--border-control); background: transparent; }
-.range.unrated::-moz-range-track { height: 0; border-top: 2px dashed var(--border-control); background: transparent; }
-.range.unrated::-webkit-slider-thumb { opacity: 0; }
-.range.unrated::-moz-range-thumb { opacity: 0; }
+/* Шкала силы эмоции 0–10: 0–5 в первом ряду, 6–10 во втором; колонка ≥ 44 px от ширины 360 */
+.strength-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; }
+.strength-name { font-weight: 600; }
+.strength-val { color: var(--text-secondary); }
+.strength-val.rated { font-weight: 700; color: var(--accent-strong); }
+.scale11 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px 4px; }
+.scale11 .cell { height: 44px; padding: 0; }
 
 /* Привычки: строка-чекбокс */
 .habits { padding-bottom: 4px; }

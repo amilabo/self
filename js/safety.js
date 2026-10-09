@@ -183,9 +183,12 @@ export function decideAttention(snap, { date, ev, nowIso, makeId }) {
 
   const prev = lastShown(snap.signals, date, (s) => s.level === 'attention');
   const higherTonight = snap.signals.some((s) => s.date === date && s.shown && (s.level === 'high' || s.level === 'crisis'));
+  // Карточка показывается не больше раза за вечер: повторное «Завершить круг» после правки
+  // её не повторяет, даже если сигналы сменились (сигнал всё равно пишется в журнал).
+  const shownTonight = snap.signals.some((s) => s.date === date && s.shown && s.level === 'attention');
   const isNewType = !prev || types.some((t) => !prev.triggers.includes(t));
   const since = prev ? diffDays(date, prev.date) : null;
-  const show = !ev.crisis && !higherTonight && (isNewType || since >= R.attentionRepeatDays);
+  const show = !ev.crisis && !higherTonight && !shownTonight && (isNewType || since >= R.attentionRepeatDays);
 
   let variant = null;
   if (show) {

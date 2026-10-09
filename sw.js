@@ -2,7 +2,7 @@
 // Данные (IndexedDB) он не трогает и никуда не отправляет.
 // При любом изменении файлов формы поднимите VERSION — иначе телефон останется на старой версии.
 
-const VERSION = '0.1.4';
+const VERSION = '0.1.5';
 const CACHE = `self-form-${VERSION}`;
 const FILES = [
   './',
@@ -19,6 +19,8 @@ const FILES = [
   './js/actions.js',
   './js/content.js',
   './js/dates.js',
+  './js/ellis.enc.js',
+  './js/ellislock.js',
   './js/db.js',
   './js/exporter.js',
   './js/install.js',

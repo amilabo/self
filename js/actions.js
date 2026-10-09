@@ -9,6 +9,8 @@ import { ensurePersisted } from './install.js';
 import { buildExport, serializeChecked, exportFileName, shareFileName, backupFileName, downloadFile, shareFile, parseImport, summarize, onlyOnPhone } from './exporter.js';
 import { showImportConfirm, showWipeConfirm } from './sheets.js';
 import { parseEllisFile, gadSignal } from './testrules.js';
+import { decryptText } from './ellislock.js';
+import { ELLIS_ENC } from './ellis.enc.js';
 
 export function createExperiment(startDate) {
   const exp = {
@@ -210,16 +212,41 @@ export async function startEllisLoad(onDone) {
     onDone(false);
     return;
   }
+  onDone(await keepEllis(parsed.test, T.tests.ellisLoaded));
+}
+
+async function keepEllis(test, okText) {
   try {
-    await savePrivateTest(parsed.test);
+    await savePrivateTest(test);
   } catch (e) {
     console.error(e);
     testStatus.ellis = { ok: false, text: T.tests.ellisErr.write };
-    onDone(false);
-    return;
+    return false;
   }
-  testStatus.ellis = { ok: true, text: T.tests.ellisLoaded };
-  onDone(true);
+  testStatus.ellis = { ok: true, text: okText };
+  return true;
+}
+
+// Есть ли в форме зашифрованный тест Эллиса (ellis.enc.js не заглушка).
+export const ellisEncAvailable = () => ELLIS_ENC != null;
+
+// Тест Эллиса по паролю: расшифровка шифра из ellis.enc.js, проверка как у файла, сохранение в private_tests.
+// Пароль нигде не сохраняется. Возвращает true, если тест открыт.
+export async function unlockEllis(password) {
+  let text;
+  try {
+    text = await decryptText(ELLIS_ENC, password);
+  } catch (e) {
+    if (!e || !e.code) console.error(e);
+    testStatus.ellis = { ok: false, text: T.tests.ellisErr[e && e.code] || T.tests.ellisErr.broken };
+    return false;
+  }
+  const parsed = parseEllisFile(text);
+  if (parsed.error) {
+    testStatus.ellis = { ok: false, text: T.tests.ellisErr.broken };
+    return false;
+  }
+  return keepEllis(parsed.test, T.tests.ellisUnlocked);
 }
 
 export const draftKey = (testId) => `test_draft_${testId}`;

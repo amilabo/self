@@ -123,6 +123,14 @@ async function init() {
     }
   });
   window.addEventListener('pagehide', persistNow);
+  // Касание по пустому месту (не по полю, кнопке, ссылке или подписи поля) снимает фокус с поля ввода,
+  // чтобы спрятать клавиатуру, ничего не нажав. click приходит только на касание без прокрутки.
+  document.addEventListener('click', (e) => {
+    const a = document.activeElement;
+    if (!a || !a.matches || !a.matches('input, textarea')) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, button, a, label, [role="radio"], [role="checkbox"], [contenteditable]')) return;
+    a.blur();
+  });
   setInterval(() => timer.update(), 10000);
 
   if (!location.hash || location.hash === '#') location.replace('#/today');

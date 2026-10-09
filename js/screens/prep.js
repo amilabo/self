@@ -5,9 +5,9 @@ import { T, GAD7, ELLIS } from '../content.js';
 import { S, hasUserData, saveExperiment, setUi } from '../store.js';
 import { logicalDate, addDays, weekdayDayMonth, weekdayLong, dayMonth } from '../dates.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
-import { createExperiment, checkPersist, startImport, dataStatus, startEllisLoad, testStatus } from '../actions.js';
+import { createExperiment, checkPersist, startImport, dataStatus, testStatus } from '../actions.js';
 import { go, refresh, testHash } from '../nav.js';
-import { stateOf, ellisFile, bandShort } from './testcommon.js';
+import { stateOf, ellisFile, bandShort, ellisGetBlock } from './testcommon.js';
 
 // Выбор до нажатия «Готово» (если эксперимент ещё не создан). «Завтра» — настройка по умолчанию.
 let pendingStart = 'tomorrow';
@@ -42,9 +42,7 @@ function ellisItem(today) {
       : h('div', { class: 'error', role: 'status' }, icon('alert', 16), testStatus.ellis.text))
     : null;
   if (!ellisFile()) {
-    return card('', head, h('div', { class: 'body-sm', id: 'prep-ellis-note' }, T.tests.ellisNeedFile),
-      button(T.tests.ellisLoad, () => startEllisLoad(() => refresh()), { kind: 'secondary', fk: 'ellis-load', attrs: { 'aria-describedby': 'prep-ellis-note' } }),
-      status);
+    return card('', head, ellisGetBlock({ idPrefix: 'prep-ellis', kind: 'secondary' }), status);
   }
   if (S.ui.prep_ellis_later === today) return card('', head, h('div', { class: 'caption' }, T.prep.testLater), status);
   return card('', head, status, h('div', { class: 'pair' },

@@ -3,9 +3,9 @@
 
 import { h, button, icon, dock, kvRow } from '../ui.js';
 import { T, GAD7, ELLIS } from '../content.js';
-import { startEllisLoad, testStatus } from '../actions.js';
-import { go, refresh, testHash, resultHash } from '../nav.js';
-import { stateOf, resultDay, bandShort, ellisFile, draftAnswered } from './testcommon.js';
+import { testStatus } from '../actions.js';
+import { go, testHash, resultHash } from '../nav.js';
+import { stateOf, resultDay, bandShort, ellisFile, draftAnswered, ellisGetBlock } from './testcommon.js';
 
 const lockPlate = (text, iconName = 'lock') => h('div', { class: 'lock-plate' }, icon(iconName, 16), text);
 const gadValue = (rec) => T.tests.gadValue(rec.score, bandShort(rec), resultDay(rec));
@@ -72,10 +72,8 @@ function ellisCard() {
   let action = null;
   let note = null;
   if (st.open && !file) {
-    // Без файла тест не пройти: текст не входит в код формы.
-    note = h('div', { class: 'body-sm', id: 'ellis-file-note' }, T.tests.ellisNeedFile);
-    action = button(T.tests.ellisLoad, () => startEllisLoad(() => refresh()),
-      { kind: st.last ? 'secondary' : 'primary', fk: 'ellis-load', attrs: { 'aria-describedby': 'ellis-file-note' } });
+    // Без загруженного текста тест не пройти: открытого текста нет в коде формы (пароль или файл).
+    action = ellisGetBlock({ idPrefix: 'ellis', kind: st.last ? 'secondary' : 'primary' });
   } else if (st.open) {
     const answered = draftAnswered(ELLIS.test_id, st.open);
     action = button(answered ? T.tests.resume : T.tests.take, () => go(testHash(ELLIS.test_id)), { fk: 'ellis-take' });

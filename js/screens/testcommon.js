@@ -1,10 +1,12 @@
 // Общее для экранов тестов: номер дня, описания тестов, состояние окна, подписи результатов.
 
-import { GAD7, ELLIS } from '../content.js';
+import { GAD7, ELLIS, T } from '../content.js';
 import { S } from '../store.js';
 import { logicalDate, dayNumber } from '../dates.js';
 import { testState, gadBand, draftFits, answeredCount } from '../testrules.js';
-import { draftKey } from '../actions.js';
+import { draftKey, startEllisLoad, unlockEllis, ellisEncAvailable, testStatus } from '../actions.js';
+import { h, button } from '../ui.js';
+import { refresh } from '../nav.js';
 
 // Номер дня сегодня; до создания эксперимента — подготовка (день 0).
 export function currentDay() {
@@ -55,3 +57,52 @@ export function draftOf(testId, window) {
 export const draftAnswered = (testId, window) => answeredCount(draftOf(testId, window));
 
 export const bandShort = (rec) => gadBand(rec.score).short;
+
+// «Загрузить файл вместо пароля» нажата — до перезагрузки страницы показываем загрузку файлом.
+let ellisByFile = false;
+
+// Как получить текст теста Эллиса, пока он не загружен (экран «Тесты» и пункт «Подготовки»).
+// Есть шифр в форме (ellis.enc.js) — поле пароля и «Открыть тест», файл — запасной вариант.
+// Шифра нет — только загрузка файлом. Пароль живёт только в поле ввода и нигде не сохраняется.
+export function ellisGetBlock({ idPrefix, kind }) {
+  const noteId = `${idPrefix}-note`;
+  if (!ellisEncAvailable() || ellisByFile) {
+    return [
+      h('div', { class: 'body-sm', id: noteId }, T.tests.ellisNeedFile),
+      button(T.tests.ellisLoad, () => startEllisLoad(() => refresh()), { kind, fk: 'ellis-load', attrs: { 'aria-describedby': noteId } })
+    ];
+  }
+  const passId = `${idPrefix}-pass`;
+  const input = h('input', {
+    type: 'password', id: passId, class: 'field', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false',
+    enterkeyhint: 'go', 'aria-describedby': noteId, 'data-fk': 'ellis-pass'
+  });
+  const btn = h('button', { type: 'button', class: `btn btn-${kind}`, disabled: true, 'data-fk': 'ellis-open' }, T.tests.ellisOpen);
+  let busy = false;
+  const sync = () => { btn.disabled = busy || input.value === ''; };
+  const open = async () => {
+    if (busy || input.value === '') return;
+    const pass = input.value;
+    busy = true;
+    input.disabled = true;
+    btn.textContent = T.tests.ellisOpening;
+    sync();
+    await unlockEllis(pass);
+    input.value = '';
+    busy = false;
+    refresh();
+  };
+  input.addEventListener('input', sync);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } });
+  btn.addEventListener('click', open);
+  const useFile = h('button', {
+    type: 'button', class: 'link-btn', 'data-fk': 'ellis-use-file',
+    onclick: () => { ellisByFile = true; testStatus.ellis = null; refresh(); }
+  }, T.tests.ellisUseFile);
+  return [
+    h('div', { class: 'body-sm', id: noteId }, T.tests.ellisNeedPass),
+    h('div', { class: 'stack-8' }, h('label', { for: passId, class: 'label' }, T.tests.ellisPassLabel), input),
+    btn,
+    useFile
+  ];
+}

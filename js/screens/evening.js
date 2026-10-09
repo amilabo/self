@@ -2,17 +2,20 @@
 // Черновик пишется в IndexedDB при каждом изменении и при переходах между шагами.
 // Проверка безопасности — при сохранении шага (переход «Дальше», «Назад», «Выйти», «Завершить круг»).
 
-import { h, region, card, button, scale10, segments, chips, textField, otherField, strengthSlider, stepHeader, titleRow, optional, icon, reqStar } from '../ui.js';
+import { h, region, card, button, scale10, segments, chips, textField, otherField, strengthScale, stepHeader, titleRow, optional, icon, reqStar } from '../ui.js';
 import { T, SKIP_OPTIONS, FRICTION_OPTIONS, FRICTION_NONE, OTHER, EMOTION_GROUPS, YES_PARTLY_NO, NOW_OPTIONS, GOOD_VARIANTS, QUESTION_SET_VERSION, HABIT_HINTS } from '../content.js';
-import { S, saveEvening, putMark, putSkip, putSignal, markKey, setUi, flushPending } from '../store.js';
+import { S, saveEvening, putMark, putSkip, putSignal, markKey, setUi, clearUi, flushPending } from '../store.js';
 import { logicalDate, dayNumber, isoLocal, isYmd } from '../dates.js';
-import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, emptyAbc, newEvening, isFilledLater } from '../rules.js';
+import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
 import { decideStepSignals, decideAttention, eveningFields, abcFields } from '../safety.js';
 import { applyStepSignals, signalContext } from '../actions.js';
 import { showSafety, showDraftConfirm } from '../sheets.js';
-import { go, refresh, eveningHash } from '../nav.js';
+import { go, refresh, eveningHash, parseRoute } from '../nav.js';
 import { timer } from '../session.js';
 import { textOrNull, isBlank, uuid } from '../util.js';
+
+// Правка завершённого круга: снимок обязательных ответов (S.ui.evening_edit, см. editBase в rules.js).
+const EDIT_KEY = 'evening_edit';
 
 // Раскрыта ли группа «Ещё эмоции» — только на время заполнения шага.
 const moreOpen = new Map();
@@ -31,7 +34,10 @@ export function renderEvening(route) {
   if (!exp || !isYmd(date) || date > today || dayNumber(date, exp.start_date) < 1) { go('#/today', { replace: true }); return null; }
 
   let ev = S.evenings.get(date);
-  if (ev && ev.completed_at) { go('#/today', { replace: true }); return null; }
+  // Завершённый круг открывается на правку только в свой логический день (до 04:00 следующих суток).
+  if (ev && ev.completed_at && !canEditEvening(ev, today)) { go('#/today', { replace: true }); return null; }
+  const editing = !!(ev && ev.completed_at);
+  if (editing && !(S.ui[EDIT_KEY] && S.ui[EDIT_KEY].date === date)) setUi(EDIT_KEY, editBase(ev));
   if (!ev) {
     // Новый круг начинается только с шага 1 и только за сегодня (задним числом — в v0.2 из «Истории»).
     if (date !== today) { go('#/today', { replace: true }); return null; }
@@ -98,26 +104,25 @@ export function renderEvening(route) {
       return;
     }
     if (target === 'finish') complete();
-    else if (target === 'exit') go('#/today', { skipLeaveCheck: true });
+    else if (target === 'exit') { endEdit(); go('#/today', { skipLeaveCheck: true }); }
     else go(eveningHash(date, target), { skipLeaveCheck: true });
+  }
+
+  // Вышли из правки завершённого круга без «Завершить круг»: правки уже записаны,
+  // обязательные ответы возвращаются, если их убрали (restoreRequired).
+  function endEdit() {
+    if (!editing) return;
+    if (restoreRequired(ev, S.ui[EDIT_KEY])) save();
+    clearUi(EDIT_KEY);
+    setUi('evening_step', null);
+    moreOpen.delete(date);
   }
 
   function complete() {
     timer.update();
     const now = isoLocal();
-    ev.completed_at = now;
-    ev.filled_later = isFilledLater(date, now);
-    const m = S.mornings.get(date);
-    if (!(m && m.intention)) ev.intention_result = null;
-    if (ev.abc) {
-      if (isBlank(ev.abc.e_belief)) ev.abc.c_emotions.forEach((e) => { e.after = null; });
-      ev.abc_done = abcDone(ev.abc);
-      ev.de_done = deDone(ev.abc);
-    } else {
-      ev.abc_done = false;
-      ev.de_done = false;
-    }
-    if (ev.crisis) { ev.friction = null; ev.now_vs_start = null; }
+    // Повторное завершение (правка) не меняет completed_at и filled_later; edited_at ставит saveEvening.
+    finishEvening(ev, { nowIso: now, morning: S.mornings.get(date) });
     // Неотмеченная ручная привычка в завершённом круге = «не сделано».
     for (const hb of S.habits) {
       if (hb.mark_mode === 'manual' && !hb.archived && !S.marks.has(markKey(date, hb.id))) putMark(date, hb.id, false, 'manual');
@@ -126,6 +131,7 @@ export function renderEvening(route) {
     save();
     timer.detach();
     setUi('evening_step', null);
+    if (editing) clearUi(EDIT_KEY);
     moreOpen.delete(date);
     const att = decideAttention(S, { date, ev, nowIso: now, makeId: uuid });
     for (const r of att.upserts) putSignal(r);
@@ -186,7 +192,9 @@ export function renderEvening(route) {
       }
       const isMorning = hb.mark_mode === 'auto_morning';
       const done = isMorning ? !!(mark && mark.done) : isCounted(ev);
-      const hintText = isMorning ? (intention ? HABIT_HINTS.morningDone : HABIT_HINTS.morningMissing) : HABIT_HINTS.eveningPending;
+      // Правка завершённого круга: вечер уже засчитан — «отмечено автоматически».
+      const hintText = isMorning ? (intention ? HABIT_HINTS.morningDone : HABIT_HINTS.morningMissing)
+        : editing ? HABIT_HINTS.morningDone : HABIT_HINTS.eveningPending;
       return h('div', { role: 'checkbox', class: 'habit-row auto', 'aria-checked': done ? 'true' : 'false', 'aria-disabled': 'true' },
         h('span', { class: 'stack-2' }, h('span', { class: 'habit-name' }, hb.name), h('span', { class: 'caption' }, hintText)),
         h('span', { class: done ? 'box auto-on' : 'box auto-off' }, done ? icon('check', 18, 3) : null));
@@ -311,9 +319,9 @@ export function renderEvening(route) {
 
     const before = emotions.length ? h('div', { class: 'stack-12 divider' },
       h('div', { class: 'label' }, T.step2.strengthTitle),
-      emotions.map((e) => strengthSlider({
+      emotions.map((e) => strengthScale({
         label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
-        onSet: (v) => { e.before = v; save(true); }
+        onSet: (v) => { e.before = v; save(); }
       }))) : null;
 
     let hadE = !isBlank(abc.e_belief);
@@ -322,9 +330,9 @@ export function renderEvening(route) {
       // Прежнее значение («было 7») не показываем — ни в подписи, ни в aria.
       return h('div', { class: 'stack-12 divider' },
         h('div', { class: 'label' }, T.step2.afterTitle),
-        emotions.map((e) => strengthSlider({
+        emotions.map((e) => strengthScale({
           label: sliderLabel(e), value: e.after, ariaLabel: T.step2.afterAria(sliderLabel(e)), fk: `after-${e.name}`, emo: e.name,
-          onSet: (v) => { e.after = v; save(true); }
+          onSet: (v) => { e.after = v; save(); }
         })),
         h('div', { class: 'caption' }, T.step2.afterNote));
     });
@@ -403,7 +411,7 @@ export function renderEvening(route) {
       const frictionMissing = !crisis && !(f && f.reasons.length);
       const otherMissing = !crisis && !!f && f.reasons.includes(OTHER) && isBlank(f.other_text);
       return [
-        hint(T.step3.autoNote),
+        editing ? null : hint(T.step3.autoNote),
         frictionMissing ? hint(T.step3.needFriction) : null,
         otherMissing ? hint(T.step3.needOther) : null,
         button(T.step3.finish, () => leaveStep('finish'), { large: true, disabled: frictionMissing || otherMissing, fk: 'finish' })
@@ -475,5 +483,14 @@ export function renderEvening(route) {
   const el = h('main', { class: 'screen inner' }, parts);
 
   // Уход без кнопок формы (системная кнопка «назад»): шаг тоже сохраняется и проверяется.
-  return { el, leave: () => (checked ? null : { show: runCheck(), backHash: eveningHash(date, step) }) };
+  // Если при этом ушли из круга совсем (а не на соседний шаг), правка завершённого круга заканчивается.
+  return {
+    el,
+    leave: () => {
+      if (checked) return null;
+      const show = runCheck();
+      if (parseRoute().name !== 'evening') endEdit();
+      return { show, backHash: eveningHash(date, step) };
+    }
+  };
 }
