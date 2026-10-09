@@ -88,10 +88,19 @@ export function saveExperiment(exp) {
   return write('experiment', exp, 'main');
 }
 
+// Справочник привычек сверяется с content.js при каждом запуске: новые добавляются,
+// изменённые (название, планка, порядок, архив) обновляются. Отметки не трогаются.
+const HABIT_KEYS = ['name', 'threshold', 'mark_mode', 'order', 'archived'];
 export function ensureHabits() {
-  if (S.habits.length) return;
-  S.habits = HABITS.map((h) => ({ ...h }));
-  for (const h of S.habits) write('habits', h);
+  const byId = new Map(S.habits.map((h) => [h.id, h]));
+  for (const h of HABITS) {
+    const old = byId.get(h.id);
+    if (old && HABIT_KEYS.every((k) => old[k] === h[k])) continue;
+    const rec = { ...(old || {}), ...h };
+    byId.set(h.id, rec);
+    write('habits', rec);
+  }
+  S.habits = [...byId.values()].sort((a, b) => a.order - b.order);
 }
 
 export function saveMorning(m, { debounce = false } = {}) {

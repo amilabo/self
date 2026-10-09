@@ -3,24 +3,29 @@
 // Правки формулировок и списков вносятся только здесь. Любое изменение вопросов,
 // вариантов или списков поднимает QUESTION_SET_VERSION на 1 (не чаще раза в неделю, EXPERIMENT.md).
 
-export const QUESTION_SET_VERSION = 1;
+export const QUESTION_SET_VERSION = 2; // v2 (2026-10-09): новый список привычек
 export const SCHEMA_VERSION = 1;
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.1.2';
 export const EXPORT_FORMAT = 'self-reflection-export';
 export const EXPERIMENT_LENGTH = 21;
 export const DAY_BOUNDARY = '04:00';
 
 // Справочник привычек (PRD §6.2, habits). Порядок — как на шаге 1 макета.
 export const HABITS = [
-  { id: 'exercise', name: 'Зарядка', threshold: 'от 5 минут', mark_mode: 'manual', order: 1, archived: false },
-  { id: 'meditation', name: 'Медитация', threshold: 'от 5 минут', mark_mode: 'manual', order: 2, archived: false },
-  { id: 'english', name: 'Английский', threshold: 'от 10 минут', mark_mode: 'manual', order: 3, archived: false },
-  { id: 'morning_setup', name: 'Утренняя настройка', threshold: 'записано намерение на день', mark_mode: 'auto_morning', order: 4, archived: false },
-  { id: 'evening_reflection', name: 'Вечерняя рефлексия', threshold: 'пройден вечерний круг', mark_mode: 'auto_evening', order: 5, archived: false }
+  { id: 'breakfast', name: 'Завтрак', threshold: 'поела утром', mark_mode: 'manual', order: 1, archived: false },
+  { id: 'lunch', name: 'Обед', threshold: 'поела днём', mark_mode: 'manual', order: 2, archived: false },
+  { id: 'walk_sport', name: 'Прогулка/спорт', threshold: 'от 15 минут', mark_mode: 'manual', order: 3, archived: false },
+  { id: 'english', name: 'Английский', threshold: 'от 10 минут', mark_mode: 'manual', order: 4, archived: false },
+  { id: 'beauty', name: 'Красота', threshold: 'уход за собой', mark_mode: 'manual', order: 5, archived: false },
+  { id: 'morning_setup', name: 'Утренняя настройка', threshold: 'записано намерение на день', mark_mode: 'auto_morning', order: 6, archived: false },
+  { id: 'evening_reflection', name: 'Вечерняя рефлексия', threshold: 'пройден вечерний круг', mark_mode: 'auto_evening', order: 7, archived: false },
+  // Убраны владельцем 2026-10-09. Остаются в справочнике архивными, чтобы старые отметки в экспорте имели ссылку.
+  { id: 'exercise', name: 'Зарядка', threshold: 'от 5 минут', mark_mode: 'manual', order: 90, archived: true },
+  { id: 'meditation', name: 'Медитация', threshold: 'от 5 минут', mark_mode: 'manual', order: 91, archived: true }
 ];
 
 // Порядок чипов «Привычки сегодня» на главном экране (макет Main).
-export const TODAY_HABIT_ORDER = ['morning_setup', 'exercise', 'meditation', 'english', 'evening_reflection'];
+export const TODAY_HABIT_ORDER = ['morning_setup', 'breakfast', 'lunch', 'walk_sport', 'english', 'beauty', 'evening_reflection'];
 
 export const HABIT_HINTS = {
   morningDone: 'отмечено автоматически',

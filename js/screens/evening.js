@@ -120,7 +120,7 @@ export function renderEvening(route) {
     if (ev.crisis) { ev.friction = null; ev.now_vs_start = null; }
     // Неотмеченная ручная привычка в завершённом круге = «не сделано».
     for (const hb of S.habits) {
-      if (hb.mark_mode === 'manual' && !S.marks.has(markKey(date, hb.id))) putMark(date, hb.id, false, 'manual');
+      if (hb.mark_mode === 'manual' && !hb.archived && !S.marks.has(markKey(date, hb.id))) putMark(date, hb.id, false, 'manual');
     }
     putMark(date, 'evening_reflection', true, 'auto');
     save();
