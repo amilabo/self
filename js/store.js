@@ -17,7 +17,8 @@ export const S = {
   signals: [],
   tests: [],
   exports: [],
-  ui: {}                 // состояние интерфейса, в экспорт не попадает
+  ui: {},                // состояние интерфейса, в экспорт не попадает
+  privateTests: {}       // test_id → загруженный текст теста (Эллис); не экспортируется, импорт не трогает
 };
 
 let db = null;
@@ -56,10 +57,10 @@ export function flushPending() {
 }
 
 async function readAll() {
-  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui] = await Promise.all([
+  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui, priv] = await Promise.all([
     db.getAll('experiment'), db.getAll('habits'), db.getAll('habit_marks'), db.getAll('mornings'),
     db.getAll('evenings'), db.getAll('skip_reports'), db.getAll('safety_signals'), db.getAll('test_results'),
-    db.getAll('exports'), db.getEntries('ui')
+    db.getAll('exports'), db.getEntries('ui'), db.getEntries('private_tests')
   ]);
   S.experiment = exp[0] || null;
   S.habits = habits.sort((a, b) => a.order - b.order);
@@ -71,16 +72,23 @@ async function readAll() {
   S.tests = tests;
   S.exports = exports.sort((a, b) => (a.at < b.at ? -1 : 1));
   S.ui = Object.fromEntries(ui);
+  S.privateTests = Object.fromEntries(priv);
 }
 
-export async function loadAll() {
-  db = await openDb();
+export async function loadAll({ onBlocked } = {}) {
+  db = await openDb({ onBlocked });
   S.memoryOnly = db.memory;
   await readAll();
 }
 
+// Есть ли утренние или вечерние записи (от них зависит, можно ли менять дату старта).
 export function hasUserData() {
   return S.mornings.size > 0 || S.evenings.size > 0;
+}
+
+// Есть ли что терять при замене или удалении: записи дня или результаты тестов (нужен бэкап).
+export function hasAnyRecords() {
+  return hasUserData() || S.tests.length > 0;
 }
 
 export function saveExperiment(exp) {
@@ -146,6 +154,24 @@ export function setUi(key, value) {
   return write('ui', value, key);
 }
 
+export function clearUi(key) {
+  delete S.ui[key];
+  return db.delete('ui', key).catch((e) => { S.writeError = true; console.error('Ошибка записи', 'ui', e); });
+}
+
+export function putTestResult(rec) {
+  const i = S.tests.findIndex((t) => t.id === rec.id);
+  if (i >= 0) S.tests[i] = rec; else S.tests.push(rec);
+  return write('test_results', rec);
+}
+
+// Текст приватного теста хранится отдельно от данных: не входит в экспорт, импорт его не трогает.
+// Ошибку записи пробрасываем: экран покажет, что файл не сохранился.
+export async function savePrivateTest(test) {
+  await db.put('private_tests', test, test.test_id);
+  S.privateTests[test.test_id] = test;
+}
+
 // Импорт: замена всех данных одной транзакцией, затем перечитываем снимок.
 export async function replaceAllData(data) {
   await flushPending();
@@ -154,13 +180,14 @@ export async function replaceAllData(data) {
   ensureHabits();
 }
 
-// «Удалить все данные»: очищает все хранилища данных и состояние интерфейса
-// (кроме отметки о защищённом хранилище) и перечитывает пустой снимок.
+// «Удалить все данные»: очищает все хранилища данных, состояние интерфейса
+// (кроме отметки о защищённом хранилище) и загруженный текст теста Эллиса, затем перечитывает пустой снимок.
 export async function wipeAllData() {
   await flushPending();
   await db.replaceData({ experiment: null });
   for (const key of Object.keys(S.ui)) {
     if (key !== 'persisted') await db.delete('ui', key);
   }
+  for (const key of Object.keys(S.privateTests)) await db.delete('private_tests', key);
   await readAll();
 }

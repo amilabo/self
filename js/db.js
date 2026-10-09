@@ -1,9 +1,9 @@
-// IndexedDB: одно хранилище на сущность PRD §6.2 плюс `ui` для состояния интерфейса
-// (не экспортируется). Если IndexedDB недоступна (например, страница открыта в песочнице),
+// IndexedDB: одно хранилище на сущность PRD §6.2, `ui` для состояния интерфейса и `private_tests`
+// для загруженного текста теста Эллиса (оба не экспортируются, импорт их не трогает). Если IndexedDB недоступна (например, страница открыта в песочнице),
 // работает запасной вариант в памяти — форма об этом предупреждает.
 
 const DB_NAME = 'self-form';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // v2: + private_tests
 
 // keyPath хранилищ. null — ключ передаётся отдельно (experiment — 'main', ui — имя настройки).
 const STORE_KEYS = {
@@ -16,7 +16,8 @@ const STORE_KEYS = {
   safety_signals: 'id',
   test_results: 'id',
   exports: 'id',
-  ui: null
+  ui: null,
+  private_tests: null // ключ — test_id ('ellis')
 };
 
 export const DATA_STORES = ['experiment', 'habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports'];
@@ -36,7 +37,9 @@ function txDone(tx) {
   });
 }
 
-function openIdb() {
+// onBlocked — форма открыта в другой вкладке со старой версией базы: ждём, пока её закроют,
+// и показываем об этом сообщение (иначе пришлось бы работать в памяти и терять записи).
+function openIdb(onBlocked) {
   return new Promise((resolve, reject) => {
     if (!('indexedDB' in self)) { reject(new Error('no indexedDB')); return; }
     let req;
@@ -49,9 +52,14 @@ function openIdb() {
         }
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Новая версия формы в другой вкладке просит обновить базу — закрываем соединение, чтобы не мешать.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('blocked'));
+    req.onblocked = () => { if (onBlocked) onBlocked(); };
   });
 }
 
@@ -122,9 +130,9 @@ function memoryAdapter() {
   };
 }
 
-export async function openDb() {
+export async function openDb({ onBlocked } = {}) {
   try {
-    const db = await openIdb();
+    const db = await openIdb(onBlocked);
     return idbAdapter(db);
   } catch (e) {
     console.warn('IndexedDB недоступна, данные только в памяти', e);

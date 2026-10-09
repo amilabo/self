@@ -12,11 +12,16 @@ import { renderEvening } from './screens/evening.js';
 import { renderHelp } from './screens/help.js';
 import { renderData } from './screens/data.js';
 import { renderTests } from './screens/tests.js';
+import { renderTestRun } from './screens/testrun.js';
+import { renderTestResult } from './screens/testresult.js';
 
 // В одностраничном превью (tools/build_preview.py) заменяется на true: без service worker.
 const PREVIEW = false;
 
-const SCREENS = { today: renderToday, morning: renderMorning, evening: renderEvening, help: renderHelp, data: renderData, tests: renderTests };
+const SCREENS = {
+  today: renderToday, morning: renderMorning, evening: renderEvening, help: renderHelp, data: renderData,
+  tests: renderTests, test: renderTestRun, result: renderTestResult
+};
 let current = null;
 
 function showFatal(e) {
@@ -83,10 +88,20 @@ function persistNow() {
   flushPending();
 }
 
+// Новая версия формы обновляет базу, а в другой вкладке открыта старая: ждём, пока её закроют.
+function showBlocked() {
+  const app = document.getElementById('app');
+  app.replaceChildren();
+  const box = document.createElement('main');
+  box.className = 'screen inner';
+  box.innerHTML = '<h1 class="h1">Форма открыта в другой вкладке</h1><div class="body">Закройте другие вкладки или окна с формой — эта откроется сама. Записи не пропадут.</div>';
+  app.append(box);
+}
+
 async function init() {
   initInstall();
   try {
-    await loadAll();
+    await loadAll({ onBlocked: showBlocked });
   } catch (e) {
     showFatal(e);
     return;
@@ -103,8 +118,8 @@ async function init() {
     if (document.visibilityState === 'hidden') persistNow();
     else {
       timer.update();
-      // Могла смениться логическая дата (граница суток 04:00).
-      if (['today', 'data'].includes(parseRoute().name)) refresh();
+      // Могла смениться логическая дата (граница суток 04:00), а с ней окна тестов.
+      if (['today', 'data', 'tests'].includes(parseRoute().name)) refresh();
     }
   });
   window.addEventListener('pagehide', persistNow);

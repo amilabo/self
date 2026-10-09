@@ -1,16 +1,56 @@
 // Экран «Подготовка» (день 0): чеклист на месте «Сегодня» (EXPERIMENT.md, «Первый запуск»).
 
 import { h, card, button, segments, icon, dock } from '../ui.js';
-import { T } from '../content.js';
-import { S, hasUserData, saveExperiment } from '../store.js';
+import { T, GAD7, ELLIS } from '../content.js';
+import { S, hasUserData, saveExperiment, setUi } from '../store.js';
 import { logicalDate, addDays, weekdayDayMonth, weekdayLong, dayMonth } from '../dates.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
-import { createExperiment, checkPersist, startImport, dataStatus } from '../actions.js';
-import { go, refresh } from '../nav.js';
+import { createExperiment, checkPersist, startImport, dataStatus, startEllisLoad, testStatus } from '../actions.js';
+import { go, refresh, testHash } from '../nav.js';
+import { stateOf, ellisFile, bandShort } from './testcommon.js';
 
 // Выбор до нажатия «Готово» (если эксперимент ещё не создан). «Завтра» — настройка по умолчанию.
 let pendingStart = 'tomorrow';
 let savedNote = false;
+
+// Пункт «Тест на тревогу» (макет Start): «Позже» / «Пройти». «Позже» только сворачивает пункт:
+// тест остаётся карточкой на «Сегодня», пока открыто окно (EXPERIMENT.md, «Первый запуск»).
+function gadItem(today) {
+  const st = stateOf(GAD7.test_id);
+  const head = h('div', { class: 'stack-4' }, h('h2', { class: 'title' }, T.prep.testTitle), h('div', { class: 'body-sm' }, T.prep.testText));
+  if (st.baseline) {
+    return card('', head, h('div', { class: 'ok-line', role: 'status' }, icon('check', 24), T.prep.testDone(`${st.baseline.score} · ${bandShort(st.baseline)}`)));
+  }
+  if (!st.open) return null;
+  if (S.ui.prep_gad_later === today) {
+    return card('', head, h('div', { class: 'caption' }, T.prep.testLater));
+  }
+  return card('', head, h('div', { class: 'pair' },
+    button(T.common.later, () => { setUi('prep_gad_later', today); refresh(); }, { kind: 'secondary', fk: 'gad-later' }),
+    button(T.tests.take, () => go(testHash(GAD7.test_id, 'today')), { fk: 'gad-take' })));
+}
+
+// Пункт «Тест по модели А. Эллиса»: сначала загрузка приватного файла, затем «Позже» / «Пройти».
+function ellisItem(today) {
+  const st = stateOf(ELLIS.test_id);
+  const head = h('div', { class: 'stack-4' }, h('h2', { class: 'title' }, T.prep.ellisTitle), h('div', { class: 'body-sm' }, T.prep.ellisText));
+  if (st.baseline) return card('', head, h('div', { class: 'ok-line', role: 'status' }, icon('check', 24), T.prep.ellisDone));
+  if (!st.open) return null;
+  const status = testStatus.ellis
+    ? (testStatus.ellis.ok
+      ? h('div', { class: 'ok-line small', role: 'status' }, icon('check', 16), testStatus.ellis.text)
+      : h('div', { class: 'error', role: 'status' }, icon('alert', 16), testStatus.ellis.text))
+    : null;
+  if (!ellisFile()) {
+    return card('', head, h('div', { class: 'body-sm', id: 'prep-ellis-note' }, T.tests.ellisNeedFile),
+      button(T.tests.ellisLoad, () => startEllisLoad(() => refresh()), { kind: 'secondary', fk: 'ellis-load', attrs: { 'aria-describedby': 'prep-ellis-note' } }),
+      status);
+  }
+  if (S.ui.prep_ellis_later === today) return card('', head, h('div', { class: 'caption' }, T.prep.testLater), status);
+  return card('', head, status, h('div', { class: 'pair' },
+    button(T.common.later, () => { setUi('prep_ellis_later', today); refresh(); }, { kind: 'secondary', fk: 'ellis-later' }),
+    button(T.tests.take, () => go(testHash(ELLIS.test_id, 'today')), { fk: 'ellis-take' })));
+}
 
 export function renderPrep() {
   const today = logicalDate();
@@ -78,9 +118,8 @@ export function renderPrep() {
 
     card('gap-4', h('h2', { class: 'title' }, T.prep.alarmTitle), h('div', { class: 'body-sm' }, T.prep.alarmText)),
 
-    card('',
-      h('div', { class: 'stack-4' }, h('h2', { class: 'title' }, T.prep.testTitle), h('div', { class: 'body-sm' }, T.prep.testText)),
-      h('div', { class: 'lock-plate' }, icon('lock', 16), T.prep.testSoon)),
+    gadItem(today),
+    ellisItem(today),
 
     h('div', { class: 'stack-8' },
       button(T.common.done, done, { large: true, fk: 'prep-done' }),

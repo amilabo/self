@@ -3,7 +3,7 @@
 
 import { h, card, button, icon, dock } from '../ui.js';
 import { T } from '../content.js';
-import { S, hasUserData } from '../store.js';
+import { S, hasAnyRecords } from '../store.js';
 import { logicalDate, logicalDateOfIso, diffDays, dayNumber, weekdayLong, dayMonth } from '../dates.js';
 import { lastExport } from '../rules.js';
 import { shareSupported } from '../exporter.js';
@@ -49,10 +49,10 @@ export function renderData() {
       h('div', { class: 'stack-8 divider' },
         h('div', { class: 'stack-4' },
           h('div', { class: 'label' }, T.data.restoreTitle),
-          h('div', { id: 'import-note', class: 'caption' }, hasUserData() ? T.data.importNote : T.data.importNoteEmpty)),
+          h('div', { id: 'import-note', class: 'caption' }, hasAnyRecords() ? T.data.importNote : T.data.importNoteEmpty)),
         button(T.data.importBtn, () => startImport(() => refresh()), { kind: 'secondary', fk: 'import', attrs: { 'aria-describedby': 'import-note', 'aria-haspopup': 'dialog' } }),
         statusLine(dataStatus.import))),
-    (S.experiment || hasUserData()) ? card('gap-8',
+    (S.experiment || hasAnyRecords() || Object.keys(S.privateTests).length) ? card('gap-8',
       h('div', { class: 'stack-4' },
         h('h2', { class: 'title' }, T.data.wipeTitle),
         h('div', { id: 'wipe-note', class: 'caption' }, T.data.wipeNote)),

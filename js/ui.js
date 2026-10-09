@@ -211,3 +211,38 @@ export function dock(active) {
 export function quote(caption, text) {
   return h('div', { class: 'stack-4' }, h('div', { class: 'caption' }, caption), h('div', { class: 'quote' }, `«${text}»`));
 }
+
+// Строка «ключ — значение» (DESIGN.md: 14, ключ text-secondary, значение 700).
+export function kvRow(key, value) {
+  return h('div', { class: 'kv' }, h('span', { class: 'kv-key' }, key), h('span', { class: 'kv-value' }, value));
+}
+
+// Варианты ответа теста: строки на всю ширину с радио-точкой (макет TestQuestion), role="radiogroup".
+export function optionList(options, value, onPick, { labelledby, fk }) {
+  return h('div', { class: 'opt-list', role: 'radiogroup', 'aria-labelledby': labelledby, 'aria-required': 'true' },
+    options.map((o) => {
+      const on = o.value === value;
+      return h('button', {
+        type: 'button', role: 'radio', class: 'opt-row', 'aria-checked': on ? 'true' : 'false', 'data-fk': `${fk}-${o.value}`,
+        onclick: () => onPick(o.value)
+      }, h('span', null, o.label), h('span', { class: 'opt-dot', 'aria-hidden': 'true' }));
+    }));
+}
+
+// Карточка-ссылка с шевроном справа (DESIGN.md, «Тест ещё не пройден»).
+export function linkCard(href, title, caption, { onClick } = {}) {
+  return h('a', { href, class: 'card card-link link-row', onclick: onClick },
+    h('span', { class: 'stack-4' }, h('span', { class: 'title' }, title), h('span', { class: 'caption' }, caption)),
+    icon('chevronRight', 24));
+}
+
+// Шапка теста: «Выйти», «Название · i из n», полоса прогресса.
+export function testHeader({ meta, index, total, ariaLabel, onExit, exitLabel }) {
+  const bar = h('div');
+  bar.style.width = `${Math.round((index / total) * 100)}%`;
+  return h('div', { class: 'stack-8' },
+    h('div', { class: 'row-center' },
+      h('button', { type: 'button', class: 'back-link', onclick: onExit, 'data-fk': 'back' }, icon('chevronLeft'), exitLabel),
+      h('div', { class: 'meta' }, meta)),
+    h('div', { class: 'progress', role: 'progressbar', 'aria-label': ariaLabel, 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(index) }, bar));
+}

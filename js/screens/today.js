@@ -1,14 +1,15 @@
 // Экран «Сегодня» (макет Main, DESIGN.md «Карточки на «Сегодня»»).
 
-import { h, card, button, icon, dock } from '../ui.js';
-import { T, TODAY_HABIT_ORDER } from '../content.js';
+import { h, card, button, icon, dock, linkCard } from '../ui.js';
+import { T, TODAY_HABIT_ORDER, GAD7, ELLIS } from '../content.js';
 import { S, markKey, setUi } from '../store.js';
 import { logicalDate, dayNumber, weekdayLong, dayMonth, timeOfIso } from '../dates.js';
 import { phaseOf, isCounted, exportDue, weekView, countedInExperiment } from '../rules.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
 import { checkPersist } from '../actions.js';
-import { go, refresh, eveningHash } from '../nav.js';
+import { go, refresh, eveningHash, testHash } from '../nav.js';
 import { renderPrep } from './prep.js';
+import { stateOf, ellisFile, draftAnswered } from './testcommon.js';
 
 const actionLine = (label) => h('div', { class: 'action-line' }, label, icon('chevronRight', 16));
 const doneStatus = (iso) => h('div', { class: 'done-status' }, icon('check', 16), T.today.doneAt(timeOfIso(iso)));
@@ -28,6 +29,26 @@ function morningCard(today) {
     h('div', { class: 'row-center' }, h('div', { class: 'overline' }, T.today.morningOverline), doneStatus(m.created_at)),
     m.intention ? h('div', { class: 'quote' }, `«${m.intention}»`) : null,
     actionLine(T.today.morningEdit));
+}
+
+// «Тест ещё не пройден»: пока открыто окно (дни 0–3 и с дня 21) и результата нет (EXPERIMENT.md).
+// Тест Эллиса — только исходный замер: он обязателен, повторный — по желанию, о нём не напоминаем.
+function testCards() {
+  const cards = [];
+  const gad = stateOf(GAD7.test_id);
+  if (gad.open) {
+    cards.push(linkCard(testHash(GAD7.test_id, 'today'), T.today.gadTodoTitle,
+      gad.open === 'baseline' ? T.today.gadTodoBaseline : T.today.gadTodoFinal));
+  }
+  const ellis = stateOf(ELLIS.test_id);
+  if (ellis.open === 'baseline') {
+    const answered = draftAnswered(ELLIS.test_id, ellis.open);
+    // Без загруженного файла — на «Тесты», где его загружают.
+    const href = ellisFile() ? testHash(ELLIS.test_id, 'today') : '#/tests';
+    cards.push(linkCard(href, T.today.ellisTodoTitle,
+      answered ? T.today.ellisTodoResume(answered, ELLIS.items) : T.today.ellisTodoBaseline));
+  }
+  return cards;
 }
 
 function eveningCard(today, after) {
@@ -132,10 +153,11 @@ export function renderToday() {
           h('h2', { class: 'h3' }, T.today.finalExportTitle),
           h('div', { class: 'body-sm' }, T.today.finalExportText(countedInExperiment(S)))),
         button(T.today.exportBtn, () => go('#/data'), { kind: 'on-accent' })),
+      testCards(),
       eveningCard(today, true)
     ];
   } else {
-    body = [morningCard(today), eveningCard(today, false), installCard(today), exportCard(today, day), weekCard(today), habitsBlock(today)];
+    body = [morningCard(today), testCards(), eveningCard(today, false), installCard(today), exportCard(today, day), weekCard(today), habitsBlock(today)];
   }
 
   const meta = phase === 'after'

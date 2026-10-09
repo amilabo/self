@@ -1,4 +1,5 @@
-// Маршруты на hash: #/today, #/morning, #/evening/2026-10-12/1, #/help, #/data, #/tests.
+// Маршруты на hash: #/today, #/morning, #/evening/2026-10-12/1, #/help, #/data, #/tests,
+// #/test/gad7[/today] (прохождение теста), #/result/<id>[/today] (результат). /today — вернуться на «Сегодня».
 // Хранит короткий стек переходов, чтобы «назад» с экрана помощи возвращал туда, откуда пришли.
 
 let afterRender = null;
@@ -13,8 +14,14 @@ export function parseRoute(hash = location.hash) {
     const step = Number(parts[2]);
     return { name, date: parts[1] || null, step: [1, 2, 3].includes(step) ? step : 1 };
   }
+  if (name === 'test') return { name, testId: parts[1] || null, from: parts[2] === 'today' ? 'today' : 'tests' };
+  if (name === 'result') return { name, id: parts[1] || null, from: parts[2] === 'today' ? 'today' : 'tests' };
   return { name };
 }
+
+export const testHash = (testId, from = 'tests') => `#/test/${testId}${from === 'today' ? '/today' : ''}`;
+export const resultHash = (id, from = 'tests') => `#/result/${id}${from === 'today' ? '/today' : ''}`;
+export const fromHash = (from) => (from === 'today' ? '#/today' : '#/tests');
 
 export const eveningHash = (date, step) => `#/evening/${date}/${step}`;
 

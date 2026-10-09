@@ -1,13 +1,14 @@
 // Действия, которые затрагивают данные и нужны нескольким экранам:
-// создание эксперимента, запись сигналов безопасности, экспорт, импорт.
+// создание эксперимента, запись сигналов безопасности, экспорт, импорт, тесты.
 
-import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasUserData, setUi, wipeAllData } from './store.js';
+import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasAnyRecords, setUi, clearUi, wipeAllData, putTestResult, savePrivateTest } from './store.js';
 import { EXPERIMENT_LENGTH, DAY_BOUNDARY, T } from './content.js';
 import { isoLocal, dayMonth } from './dates.js';
 import { uuid } from './util.js';
 import { ensurePersisted } from './install.js';
 import { buildExport, serializeChecked, exportFileName, shareFileName, backupFileName, downloadFile, shareFile, parseImport, summarize, onlyOnPhone } from './exporter.js';
 import { showImportConfirm, showWipeConfirm } from './sheets.js';
+import { parseEllisFile, gadSignal } from './testrules.js';
 
 export function createExperiment(startDate) {
   const exp = {
@@ -95,11 +96,11 @@ export async function doExport(method) {
 
 const IMPORT_ERRORS = { read: T.data.errRead, format: T.data.errFormat, newer: T.data.errNewer, broken: T.data.errBroken };
 
-function pickFile() {
+function pickFile(accept = '.json,.txt,application/json,text/plain') {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.txt,application/json,text/plain';
+    input.accept = accept;
     input.addEventListener('change', () => resolve(input.files && input.files[0] ? input.files[0] : null), { once: true });
     input.click();
   });
@@ -142,7 +143,7 @@ export async function startImport(onDone) {
     return;
   }
   const data = parsed.data;
-  if (!hasUserData()) {
+  if (!hasAnyRecords()) {
     onDone(await replace(data, false));
     return;
   }
@@ -161,7 +162,7 @@ export async function startImport(onDone) {
 // --- Удалить все данные ---
 // Перед удалением, если есть записи, скачивается бэкап (как перед импортом). onDone(ok) — после удаления или ошибки.
 export function startWipe(onDone) {
-  const withBackup = hasUserData();
+  const withBackup = hasAnyRecords();
   showWipeConfirm({
     withBackup,
     onConfirm: async () => {
@@ -189,4 +190,50 @@ export function startWipe(onDone) {
       onDone(true);
     }
   });
+}
+
+// --- Тесты ---
+
+// Статус загрузки файла теста Эллиса на экране «Тесты» (живёт до перезагрузки страницы).
+export const testStatus = { ellis: null };
+
+// Выбор и проверка ellis-test.json. Файл хранится в отдельном хранилище IndexedDB, в экспорт не входит.
+// onDone(ok) — после сохранения или ошибки (не вызывается при отмене выбора файла).
+export async function startEllisLoad(onDone) {
+  const file = await pickFile('.json,application/json');
+  if (!file) return;
+  let text;
+  try { text = await file.text(); } catch (e) { text = null; }
+  const parsed = text == null ? { error: 'read' } : parseEllisFile(text);
+  if (parsed.error) {
+    testStatus.ellis = { ok: false, text: T.tests.ellisErr[parsed.error] };
+    onDone(false);
+    return;
+  }
+  try {
+    await savePrivateTest(parsed.test);
+  } catch (e) {
+    console.error(e);
+    testStatus.ellis = { ok: false, text: T.tests.ellisErr.write };
+    onDone(false);
+    return;
+  }
+  testStatus.ellis = { ok: true, text: T.tests.ellisLoaded };
+  onDone(true);
+}
+
+export const draftKey = (testId) => `test_draft_${testId}`;
+
+// Сохраняет результат теста, убирает черновик; для GAD-7 ≥ 10 пишет сигнал в журнал (EXPERIMENT.md).
+export function saveTestResult(rec) {
+  putTestResult(rec);
+  clearUi(draftKey(rec.test_id));
+  if (rec.test_id === 'gad7') {
+    const sig = gadSignal({ score: rec.score, date: rec.date, nowIso: rec.taken_at, makeId: uuid });
+    if (sig) putSignal(sig);
+  }
+}
+
+export function saveDraft(testId, draft) {
+  return setUi(draftKey(testId), draft);
 }
