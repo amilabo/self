@@ -5,7 +5,7 @@
 
 export const QUESTION_SET_VERSION = 4; // v4 (2026-10-09): события дня и «хорошее днём»; v3 — тесты GAD-7 и Эллиса; v2 — новый список привычек
 export const SCHEMA_VERSION = 1;
-export const APP_VERSION = '0.1.6';
+export const APP_VERSION = '0.1.7';
 export const EXPORT_FORMAT = 'self-reflection-export';
 export const EXPERIMENT_LENGTH = 21;
 export const DAY_BOUNDARY = '04:00';
