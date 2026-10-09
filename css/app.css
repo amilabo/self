@@ -273,7 +273,6 @@ input.field[aria-invalid="true"] { padding: 0 11px; }
 .rank-list li + li { border-top: 1px solid var(--border-subtle); }
 
 /* События дня (0.1.6): кнопки на «Сегодня», список событий на шаге 2 */
-.day-actions .link-btn { align-self: center; }
 .ev-item { display: flex; align-items: center; gap: 8px; }
 .ev-item .opt-row { flex: 1; min-width: 0; }
 .ev-item .opt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }

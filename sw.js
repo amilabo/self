@@ -2,7 +2,7 @@
 // Данные (IndexedDB) он не трогает и никуда не отправляет.
 // При любом изменении файлов формы поднимите VERSION — иначе телефон останется на старой версии.
 
-const VERSION = '0.1.7';
+const VERSION = '0.1.8';
 const CACHE = `self-form-${VERSION}`;
 const FILES = [
   './',

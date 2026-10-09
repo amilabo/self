@@ -89,14 +89,16 @@ function eveningCard(today, after) {
     button(label, open, { kind: 'on-accent', fk: 'evening-start' }));
 }
 
-// Быстрая запись днём (CONTENT.md, «События дня»): «Записать событие» и более тихая «Записать хорошее».
+// Быстрая запись днём (CONTENT.md, «События дня»): «Что-то задело» и «Что-то хорошее» — равные по виду,
+// обе второстепенные относительно вечернего круга (решение 2026-10-09, против перекоса внимания в негатив).
 // Без счётчиков и подсказок о количестве. После сохранения — короткое сообщение над кнопками.
 function dayActions() {
   const saved = takeFlash();
   return h('div', { class: 'stack-8 day-actions' },
     saved ? h('div', { class: 'ok-line', role: 'status' }, icon('check', 16), saved) : null,
-    button(T.day.eventBtn, () => go(dayEventHash('event')), { kind: 'secondary', fk: 'day-event' }),
-    h('button', { type: 'button', class: 'link-btn', 'data-fk': 'day-good', onclick: () => go(dayEventHash('good')) }, T.day.goodBtn));
+    h('div', { class: 'pair' },
+      button(T.day.eventBtn, () => go(dayEventHash('event')), { kind: 'secondary', fk: 'day-event' }),
+      button(T.day.goodBtn, () => go(dayEventHash('good')), { kind: 'secondary', fk: 'day-good' })));
 }
 
 function installCard(today) {
