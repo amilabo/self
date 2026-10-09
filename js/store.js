@@ -153,3 +153,14 @@ export async function replaceAllData(data) {
   await readAll();
   ensureHabits();
 }
+
+// «Удалить все данные»: очищает все хранилища данных и состояние интерфейса
+// (кроме отметки о защищённом хранилище) и перечитывает пустой снимок.
+export async function wipeAllData() {
+  await flushPending();
+  await db.replaceData({ experiment: null });
+  for (const key of Object.keys(S.ui)) {
+    if (key !== 'persisted') await db.delete('ui', key);
+  }
+  await readAll();
+}

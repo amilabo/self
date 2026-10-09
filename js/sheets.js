@@ -99,3 +99,13 @@ export function showImportConfirm({ fileLine, phoneLine, onlyPhoneLine, onCancel
     button(T.data.impCancel, cancel, { kind: 'secondary', large: true }),
     button(T.data.impConfirm, () => { closeOverlay(); onConfirm(); }, { large: true }))), { dismiss: cancel });
 }
+
+// Лист подтверждения «Удалить все данные».
+export function showWipeConfirm({ withBackup, onConfirm }) {
+  const body = h('div', { class: 'stack-12' },
+    h('div', null, T.data.wipeConfirmText),
+    withBackup ? h('div', { class: 'body-sm' }, T.data.wipeBackup) : null);
+  openOverlay(sheet('wipe-title', T.data.wipeConfirmTitle, body, h('div', { class: 'pair' },
+    button(T.data.wipeCancel, closeOverlay, { kind: 'secondary', large: true }),
+    button(T.data.wipeConfirm, () => { closeOverlay(); onConfirm(); }, { kind: 'danger', large: true }))), { dismiss: closeOverlay });
+}

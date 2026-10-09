@@ -7,8 +7,8 @@ import { S, hasUserData } from '../store.js';
 import { logicalDate, logicalDateOfIso, diffDays, dayNumber, weekdayLong, dayMonth } from '../dates.js';
 import { lastExport } from '../rules.js';
 import { shareSupported } from '../exporter.js';
-import { doExport, startImport, dataStatus } from '../actions.js';
-import { refresh } from '../nav.js';
+import { doExport, startImport, startWipe, dataStatus } from '../actions.js';
+import { refresh, go } from '../nav.js';
 
 const statusLine = (st) => {
   if (!st) return null;
@@ -32,7 +32,7 @@ export function renderData() {
       button(T.data.share, async () => { await doExport('share'); refresh(); }, { kind: 'secondary', fk: 'share', attrs: { 'aria-describedby': 'share-note' } }),
       h('div', { id: 'share-note', class: 'caption' }, T.data.shareNote)
     ] : null,
-    statusLine(dataStatus.export)) : null;
+    statusLine(dataStatus.export)) : h('div', { class: 'caption' }, T.data.exportNeedsStart);
 
   const content = h('main', { class: 'screen tab' },
     S.memoryOnly ? card('warm', h('div', { class: 'body-sm' }, T.data.memoryOnly)) : null,
@@ -51,6 +51,12 @@ export function renderData() {
           h('div', { class: 'label' }, T.data.restoreTitle),
           h('div', { id: 'import-note', class: 'caption' }, hasUserData() ? T.data.importNote : T.data.importNoteEmpty)),
         button(T.data.importBtn, () => startImport(() => refresh()), { kind: 'secondary', fk: 'import', attrs: { 'aria-describedby': 'import-note', 'aria-haspopup': 'dialog' } }),
-        statusLine(dataStatus.import))));
+        statusLine(dataStatus.import))),
+    (S.experiment || hasUserData()) ? card('gap-8',
+      h('div', { class: 'stack-4' },
+        h('h2', { class: 'title' }, T.data.wipeTitle),
+        h('div', { id: 'wipe-note', class: 'caption' }, T.data.wipeNote)),
+      button(T.data.wipeBtn, () => startWipe((ok) => { if (ok) go('#/today', { replace: true }); else refresh(); }),
+        { kind: 'danger', fk: 'wipe', attrs: { 'aria-describedby': 'wipe-note', 'aria-haspopup': 'dialog' } })) : null);
   return { el: h('div', { class: 'page' }, content, dock('data')) };
 }

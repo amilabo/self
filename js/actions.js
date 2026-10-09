@@ -1,13 +1,13 @@
 // Действия, которые затрагивают данные и нужны нескольким экранам:
 // создание эксперимента, запись сигналов безопасности, экспорт, импорт.
 
-import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasUserData, setUi } from './store.js';
+import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasUserData, setUi, wipeAllData } from './store.js';
 import { EXPERIMENT_LENGTH, DAY_BOUNDARY, T } from './content.js';
 import { isoLocal, dayMonth } from './dates.js';
 import { uuid } from './util.js';
 import { ensurePersisted } from './install.js';
 import { buildExport, serializeChecked, exportFileName, shareFileName, backupFileName, downloadFile, shareFile, parseImport, summarize, onlyOnPhone } from './exporter.js';
-import { showImportConfirm } from './sheets.js';
+import { showImportConfirm, showWipeConfirm } from './sheets.js';
 
 export function createExperiment(startDate) {
   const exp = {
@@ -155,5 +155,38 @@ export async function startImport(onDone) {
     onlyPhoneLine: only.length ? T.data.impOnlyPhone(only.map(dayMonth).join(', ')) : null,
     onCancel: () => {},
     onConfirm: async () => onDone(await replace(data, true))
+  });
+}
+
+// --- Удалить все данные ---
+// Перед удалением, если есть записи, скачивается бэкап (как перед импортом). onDone(ok) — после удаления или ошибки.
+export function startWipe(onDone) {
+  const withBackup = hasUserData();
+  showWipeConfirm({
+    withBackup,
+    onConfirm: async () => {
+      if (withBackup) {
+        try {
+          const now = new Date();
+          downloadFile(backupFileName(now), serializeChecked(buildExport(S, isoLocal(now))));
+        } catch (e) {
+          console.error(e);
+          dataStatus.import = { ok: false, text: T.data.errBackup };
+          onDone(false);
+          return;
+        }
+      }
+      try {
+        await wipeAllData();
+      } catch (e) {
+        console.error(e);
+        dataStatus.import = { ok: false, text: T.data.errWipe };
+        onDone(false);
+        return;
+      }
+      dataStatus.export = null;
+      dataStatus.import = null;
+      onDone(true);
+    }
   });
 }
