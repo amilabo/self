@@ -48,8 +48,10 @@ const stackButtons = (...b) => h('div', { class: 'stack-8' }, ...b);
 export function showSafety(show, { onBack, onHelp, onOk }) {
   const done = (fn) => () => { closeOverlay(); if (fn) fn(); };
   if (show.kind === 'crisis') {
-    // Утром круга нет — без «круг можно не заканчивать».
-    const text = show.deleted ? SAFETY.crisis.textDeleted : show.morning ? SAFETY.crisis.textMorning : SAFETY.crisis.text;
+    // Утром и днём (быстрая запись) круга нет — без «круг можно не заканчивать».
+    const text = show.deleted
+      ? (show.morning ? SAFETY.crisis.textDeletedDay : SAFETY.crisis.textDeleted)
+      : show.morning ? SAFETY.crisis.textMorning : SAFETY.crisis.text;
     const node = h('div', { class: 'fullscreen', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'crisis-title', 'aria-describedby': 'crisis-text' },
       h('div', { class: 'stack-12' },
         h('h1', { id: 'crisis-title', class: 'h1', tabindex: '-1', 'data-autofocus': true }, SAFETY.crisis.title),
@@ -86,6 +88,13 @@ export function showDraftConfirm({ onKeep, onDrop }) {
   openOverlay(sheet('draft-title', T.step2.draftTitle, T.step2.draftText, stackButtons(
     button(T.step2.draftKeep, keep, { kind: 'secondary', large: true }),
     button(T.step2.draftDrop, () => { closeOverlay(); onDrop(); }, { large: true }))), { dismiss: keep });
+}
+
+// Лист «Запись не сохранится» (быстрая запись днём, «Отмена» с заполненными полями).
+export function showDiscardConfirm({ onDrop }) {
+  openOverlay(sheet('discard-title', T.day.discardTitle, T.day.discardText, stackButtons(
+    button(T.day.discardKeep, closeOverlay, { kind: 'secondary', large: true }),
+    button(T.day.discardDrop, () => { closeOverlay(); onDrop(); }, { large: true }))), { dismiss: closeOverlay });
 }
 
 // Лист подтверждения импорта.

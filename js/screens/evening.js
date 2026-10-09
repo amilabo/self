@@ -2,15 +2,16 @@
 // Черновик пишется в IndexedDB при каждом изменении и при переходах между шагами.
 // Проверка безопасности — при сохранении шага (переход «Дальше», «Назад», «Выйти», «Завершить круг»).
 
-import { h, region, card, button, scale10, segments, chips, textField, otherField, strengthScale, stepHeader, titleRow, optional, icon, reqStar } from '../ui.js';
+import { h, region, card, button, scale10, segments, chips, textField, otherField, strengthScale, stepHeader, titleRow, optional, icon, reqStar, emotionGroups } from '../ui.js';
 import { T, SKIP_OPTIONS, FRICTION_OPTIONS, FRICTION_NONE, OTHER, EMOTION_GROUPS, YES_PARTLY_NO, NOW_OPTIONS, GOOD_VARIANTS, QUESTION_SET_VERSION, HABIT_HINTS } from '../content.js';
-import { S, saveEvening, putMark, putSkip, putSignal, markKey, setUi, clearUi, flushPending } from '../store.js';
-import { logicalDate, dayNumber, isoLocal, isYmd } from '../dates.js';
+import { S, saveEvening, putMark, putSkip, putSignal, putDayEvent, markKey, setUi, clearUi, flushPending } from '../store.js';
+import { logicalDate, dayNumber, isoLocal, isYmd, timeOfIso } from '../dates.js';
 import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
-import { decideStepSignals, decideAttention, eveningFields, abcFields } from '../safety.js';
+import { decideStepSignals, decideAttention, eveningFields, abcFields, abcEveningFields } from '../safety.js';
+import { dayEventsOf, eventLine, abcFromEvent, eventFromAbc, abcEveningStarted, canEditDayEvent, dayCrisis } from '../dayevents.js';
 import { applyStepSignals, signalContext } from '../actions.js';
 import { showSafety, showDraftConfirm } from '../sheets.js';
-import { go, refresh, eveningHash, parseRoute } from '../nav.js';
+import { go, refresh, eveningHash, parseRoute, dayEventHash } from '../nav.js';
 import { timer } from '../session.js';
 import { textOrNull, isBlank, uuid } from '../util.js';
 
@@ -19,6 +20,9 @@ const EDIT_KEY = 'evening_edit';
 
 // Раскрыта ли группа «Ещё эмоции» — только на время заполнения шага.
 const moreOpen = new Map();
+// Событие дня, выбранное в списке шага 2 до «Разобрать выбранное» (date → id). Только на время шага:
+// при следующем открытии ничего не выбрано заранее.
+const picked = new Map();
 
 const hint = (text) => h('div', { class: 'caption center' }, text);
 const byOrder = (list) => (a, b) => list.indexOf(a) - list.indexOf(b);
@@ -45,6 +49,12 @@ export function renderEvening(route) {
     ev = newEvening(date, isoLocal());
     const pa = prevAction(S, date, { forEvening: true });
     ev.prev_action = pa ? { text: pa, status: null } : null;
+    // Днём по быстрой записи было окно «Кризис», а вечера ещё не было: флаг ставится сейчас,
+    // как если бы текст был написан в круге (CONTENT.md, «События дня»).
+    if (dayCrisis(S, date)) {
+      ev.crisis = true;
+      putMark(date, 'evening_reflection', true, 'auto');
+    }
     saveEvening(ev);
   }
   setUi('evening_step', { date, step });
@@ -52,6 +62,16 @@ export function renderEvening(route) {
 
   const crisis = ev.crisis;
   const save = (debounce = false) => saveEvening(ev, { debounce });
+  // ABC, связанная с событием дня (abc.event_id): правки A, C, B — это дописывание события,
+  // они переносятся в запись события, пока идёт её логический день (до 04:00).
+  const linkedEvent = () => (ev.abc && ev.abc.event_id ? S.dayEvents.get(ev.abc.event_id) || null : null);
+  function syncLinked(debounce = false) {
+    const rec = linkedEvent();
+    if (!rec || !canEditDayEvent(rec, logicalDate())) return;
+    const next = eventFromAbc(rec, ev.abc, isoLocal());
+    if (next) putDayEvent(next, { debounce });
+  }
+  const saveAbc = (debounce = false) => { save(debounce); syncLinked(debounce); };
 
   // --- Вопрос о пропущенном дне (шаг 1) ---
   function skipRecordForDate() {
@@ -93,7 +113,9 @@ export function renderEvening(route) {
     return res.show;
   }
 
-  function leaveStep(target) {
+  // target: номер шага, 'finish', 'exit' или маршрут '#/…' (экран события дня, потом возврат на шаг 2).
+  // beforeGo — что сделать, если окно безопасности не показано и переход состоялся.
+  function leaveStep(target, beforeGo = null) {
     const show = runCheck();
     checked = true;
     if (show) {
@@ -103,8 +125,10 @@ export function renderEvening(route) {
       });
       return;
     }
+    if (beforeGo) beforeGo();
     if (target === 'finish') complete();
     else if (target === 'exit') { endEdit(); go('#/today', { skipLeaveCheck: true }); }
+    else if (typeof target === 'string' && target.startsWith('#')) go(target, { skipLeaveCheck: true });
     else go(eveningHash(date, target), { skipLeaveCheck: true });
   }
 
@@ -112,7 +136,7 @@ export function renderEvening(route) {
   // обязательные ответы возвращаются, если их убрали (restoreRequired).
   function endEdit() {
     if (!editing) return;
-    if (restoreRequired(ev, S.ui[EDIT_KEY])) save();
+    if (restoreRequired(ev, S.ui[EDIT_KEY])) saveAbc();
     clearUi(EDIT_KEY);
     setUi('evening_step', null);
     moreOpen.delete(date);
@@ -133,6 +157,7 @@ export function renderEvening(route) {
     setUi('evening_step', null);
     if (editing) clearUi(EDIT_KEY);
     moreOpen.delete(date);
+    picked.delete(date);
     const att = decideAttention(S, { date, ev, nowIso: now, makeId: uuid });
     for (const r of att.upserts) putSignal(r);
     flushPending();
@@ -231,9 +256,16 @@ export function renderEvening(route) {
     ];
   }
 
-  // --- Шаг 2: развилка и ABC-запись ---
+  // --- Шаг 2: события дня или развилка, затем ABC-запись ---
+  // Если днём записаны события и вечерняя ABC не начата по развилке, вместо развилки — список «События дня»:
+  // выбрать одно для разбора (ничего не выбрано заранее) или «Нет, дальше» (CONTENT.md, «Вечером»).
   function step2() {
     const abc = ev.abc;
+    const events = dayEventsOf(S, date, 'event');
+    const linked = linkedEvent();
+    const listMode = events.length > 0 && (!abc || !!linked);
+    const canAdd = date === today; // дописывать и добавлять события можно только в их логический день
+
     const pickYes = () => { if (!ev.abc) { ev.abc = emptyAbc(); save(); refresh(); } };
     const dropDraft = () => {
       const res = decideStepSignals(S, {
@@ -259,7 +291,94 @@ export function renderEvening(route) {
       leaveStep(3);
     };
 
-    const fork = [
+    // --- Список событий дня ---
+    const clearAbc = () => { ev.abc = null; ev.abc_done = false; ev.de_done = false; save(); };
+    // «Нет, дальше» в разборе события: A, C, B остаются в записи события (их не удаляем и проверяем как сохранённые),
+    // удаляется только введённое вечером — «Что я сделала?», D, E, повторная оценка.
+    const dropLinked = () => {
+      const eveningOnly = new Set(abcEveningFields(ev.abc).map((x) => x.field));
+      const kept = decideStepSignals(S, {
+        date, fields: abcFields(ev.abc).filter((x) => !eveningOnly.has(x.field)), checkMood: false, crisisEvening: ev.crisis, deleted: false, ...signalContext(date)
+      });
+      applyStepSignals(kept, date, ev);
+      const del = decideStepSignals(S, {
+        date, fields: abcEveningFields(ev.abc), checkMood: false, crisisEvening: ev.crisis, deleted: true, ...signalContext(date)
+      });
+      applyStepSignals(del, date, ev);
+      const show = [kept.show, del.show].find((x) => x && x.kind === 'crisis') || kept.show || del.show;
+      clearAbc();
+      picked.delete(date);
+      checked = true;
+      go(eveningHash(date, 3), {
+        skipLeaveCheck: true,
+        after: show ? () => showSafety(show, { onBack: () => refresh(), onHelp: () => go('#/help', { skipLeaveCheck: true }) }) : null
+      });
+    };
+    const noEvents = () => {
+      if (!ev.abc) { picked.delete(date); leaveStep(3); return; }
+      if (abcEveningStarted(ev.abc)) { showDraftConfirm({ onDrop: dropLinked }); return; }
+      // Введённого вечером нет: шаг проверяется как обычно, разбор снимается после проверки.
+      leaveStep(3, () => { clearAbc(); picked.delete(date); });
+    };
+    const analyze = () => {
+      if (linked) return;
+      const rec = S.dayEvents.get(picked.get(date));
+      if (!rec) return;
+      ev.abc = abcFromEvent(rec);
+      ev.abc_done = abcDone(ev.abc);
+      ev.de_done = false;
+      save();
+      refresh();
+    };
+    // В разборе другое событие можно выбрать, пока вечером ничего не введено («Что я сделала?», D, E, повторная оценка).
+    const locked = !!linked && abcEveningStarted(abc);
+    const pickEvent = (rec) => {
+      if (linked) {
+        if (rec.id === linked.id || abcEveningStarted(ev.abc)) return; // проверка по текущему вводу, а не по отрисовке
+        ev.abc = abcFromEvent(rec);
+        ev.abc_done = abcDone(ev.abc);
+        save();
+      } else {
+        picked.set(date, rec.id);
+      }
+      refresh();
+    };
+    const pickedId = picked.get(date);
+    const selId = linked ? linked.id : (pickedId && S.dayEvents.has(pickedId) ? pickedId : null);
+
+    const eventsBlock = () => [
+      h('div', { class: 'stack-4' },
+        h('h1', { id: 'events-title', class: 'h2' }, T.day.listTitle),
+        h('div', { id: 'events-hint', class: 'body-sm' }, T.day.listHint)),
+      h('div', { class: 'stack-8' },
+        h('div', { class: 'opt-list', role: 'radiogroup', 'aria-labelledby': 'events-title', 'aria-describedby': 'events-hint' },
+          events.map((rec) => {
+            const on = rec.id === selId;
+            const off = locked && !on;
+            return h('div', { class: 'ev-item' },
+              h('button', {
+                type: 'button', role: 'radio', class: 'opt-row', 'aria-checked': on ? 'true' : 'false', disabled: off,
+                'data-fk': `ev-${rec.id}`, onclick: () => pickEvent(rec)
+              }, h('span', null, eventLine(rec, timeOfIso(rec.recorded_at))), h('span', { class: 'opt-dot', 'aria-hidden': 'true' })),
+              // Дописать событие (до 04:00). Выбранное для разбора дописывается прямо в полях ABC ниже.
+              canAdd && !(linked && linked.id === rec.id) ? h('button', {
+                type: 'button', class: 'link-btn ev-edit', 'data-fk': `ev-edit-${rec.id}`,
+                onclick: () => leaveStep(dayEventHash('event', rec.id, 'evening'))
+              }, T.day.edit) : null);
+          })),
+        canAdd && !linked ? h('button', {
+          type: 'button', class: 'link-btn', 'data-fk': 'ev-add', onclick: () => leaveStep(dayEventHash('event', null, 'evening'))
+        }, T.day.add) : null,
+        h('div', { class: 'caption' }, T.day.listNote)),
+      h('div', { class: 'card pair', role: 'group', 'aria-labelledby': 'events-title' },
+        h('button', {
+          type: 'button', class: 'cell seg', 'aria-pressed': linked ? 'true' : 'false', 'aria-expanded': linked ? 'true' : 'false',
+          'aria-controls': 'abc', disabled: !linked && !selId, 'data-fk': 'ev-analyze', onclick: analyze
+        }, T.day.analyze),
+        button(T.day.no, noEvents, { kind: 'secondary', fk: 'ev-no', attrs: { 'aria-haspopup': linked && abcEveningStarted(abc) ? 'dialog' : null } }))
+    ];
+
+    const fork = () => [
       h('div', { class: 'stack-4' },
         h('h1', { id: 'fork', class: 'h2' }, T.step2.forkQ),
         h('div', { id: 'fork-hint', class: 'body-sm' }, T.step2.forkHint)),
@@ -270,7 +389,9 @@ export function renderEvening(route) {
         }, T.step2.yes),
         button(T.step2.no, pickNo, { kind: 'secondary', fk: 'fork-no', attrs: { 'aria-haspopup': abcStarted(abc) ? 'dialog' : null } }))
     ];
-    if (!abc) return [stepHeader(2, T.common.back, () => leaveStep(1)), fork];
+
+    const top = listMode ? eventsBlock() : fork();
+    if (!abc) return [stepHeader(2, T.common.back, () => leaveStep(1)), top];
 
     const emotions = abc.c_emotions;
     const isSel = (n) => emotions.some((e) => e.name === n);
@@ -290,29 +411,9 @@ export function renderEvening(route) {
         const group = EMOTION_GROUPS.find((g) => g.items.includes(name));
         emotions.push({ name, group: group ? group.name : null, other_text: null, before: null, after: null });
       }
-      save();
+      saveAbc();
       refresh();
     };
-
-    const groupBlock = (g) => h('div', { class: 'stack-8' },
-      h('div', { class: 'overline' }, g.name),
-      chips(g.items, isSel, toggleEmotion, 'emo'));
-    const open = !!moreOpen.get(date);
-    const main = EMOTION_GROUPS.filter((g) => !g.collapsed);
-    const extraVisible = [];
-    const hidden = [];
-    // Выбранное никогда не прячется: группа с выбранной эмоцией видна и в свёрнутом виде.
-    for (const g of EMOTION_GROUPS.filter((x) => x.collapsed)) {
-      if (open || g.items.some(isSel)) extraVisible.push(g); else hidden.push(g.hint);
-    }
-    let moreHint = open ? T.step2.collapse : hidden.join(', ');
-    if (!open && moreHint) moreHint = moreHint.charAt(0).toUpperCase() + moreHint.slice(1);
-    const moreBtn = (open || hidden.length) ? h('button', {
-      type: 'button', class: 'more-btn', 'aria-expanded': open ? 'true' : 'false', 'aria-controls': 'more-emotions', 'data-fk': 'more',
-      onclick: () => { moreOpen.set(date, !open); refresh(); }
-    },
-    h('span', { class: 'stack-4' }, h('span', { class: 'more-title' }, T.step2.more), h('span', { class: 'caption' }, moreHint)),
-    icon(open ? 'chevronUp' : 'chevronDown')) : null;
 
     const otherLabel = () => (otherEmotion && !isBlank(otherEmotion.other_text) ? otherEmotion.other_text.trim() : OTHER);
     const sliderLabel = (e) => (e.name === OTHER ? otherLabel() : e.name);
@@ -321,7 +422,7 @@ export function renderEvening(route) {
       h('div', { class: 'label' }, T.step2.strengthTitle),
       emotions.map((e) => strengthScale({
         label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
-        onSet: (v) => { e.before = v; save(); }
+        onSet: (v) => { e.before = v; saveAbc(); }
       }))) : null;
 
     let hadE = !isBlank(abc.e_belief);
@@ -337,12 +438,15 @@ export function renderEvening(route) {
         h('div', { class: 'caption' }, T.step2.afterNote));
     });
 
-    const setText = (key) => (v) => { abc[key] = textOrNull(v); save(true); };
+    const setText = (key) => (v) => { abc[key] = textOrNull(v); saveAbc(true); };
+    // У выбранного события дня — когда оно записано (CONTENT.md, тексты «Вечер, шаг 2»).
+    const recordedNote = linked && listMode ? h('div', { class: 'body-sm', 'data-fk': 'ev-note' }, T.day.recordedNote(timeOfIso(linked.recorded_at))) : null;
 
     return [
       stepHeader(2, T.common.back, () => leaveStep(1)),
-      fork,
+      top,
       h('div', { id: 'abc', class: 'stack-16' },
+        recordedNote,
         card('gap-8',
           h('label', { for: 'a', class: 'q-label' }, badge('A'), T.step2.aQ),
           textField({ id: 'a', value: abc.a_event, placeholder: T.step2.aPh, rows: 2, onInput: setText('a_event') })),
@@ -351,16 +455,14 @@ export function renderEvening(route) {
           h('div', { class: 'stack-4' },
             h('div', { class: 'q-label', id: 'c-title' }, badge('C'), T.step2.cQ),
             h('div', { class: 'caption indent' }, T.step2.cCount(emotions.length))),
-          main.map(groupBlock),
-          moreBtn,
-          extraVisible.length ? h('div', { id: 'more-emotions', class: 'stack-16' }, extraVisible.map(groupBlock)) : null,
+          emotionGroups({ isSel, onToggle: toggleEmotion, open: !!moreOpen.get(date), onOpen: (v) => { moreOpen.set(date, v); refresh(); } }),
           otherEmotion ? otherField({
             id: 'emo-other', value: otherEmotion.other_text, placeholder: T.step2.otherPh, required: !crisis,
             onInput: (v) => {
               otherEmotion.other_text = textOrNull(v);
-              save(true);
+              saveAbc(true);
               footer.update();
-              // Подпись слайдеров «другое» — словами пользователя, сразу при наборе.
+              // Подпись шкал «другое» — словами пользователя, сразу при наборе.
               document.querySelectorAll(`[data-emo="${OTHER}"]`).forEach((n) => { n.textContent = otherLabel(); });
             }
           }) : null,
@@ -403,6 +505,13 @@ export function renderEvening(route) {
     if (!ev.good) { ev.good = { variant, text: null }; save(); }
     else if (isBlank(ev.good.text) && ev.good.variant !== variant) { ev.good.variant = variant; save(); }
     const gv = GOOD_VARIANTS[ev.good.variant];
+    // «Хорошее днём»: строка «Днём записала: «…»» над полем (несколько записей — по строке).
+    // Поле не заполняется автоматически — правило «без значений по умолчанию».
+    const goods = dayEventsOf(S, date, 'good').filter((g) => !isBlank(g.text));
+    const goodsToday = goods.length ? h('div', { id: 'good-day', class: 'stack-4' },
+      goods.length === 1
+        ? h('div', { class: 'body-sm' }, `${T.day.goodToday} «${goods[0].text.trim()}»`)
+        : [h('div', { class: 'body-sm' }, T.day.goodToday), goods.map((g) => h('div', { class: 'body-sm' }, `«${g.text.trim()}»`))]) : null;
 
     const fr = ev.friction || { reasons: [], other_text: null };
     const otherOn = fr.reasons.includes(OTHER);
@@ -454,8 +563,8 @@ export function renderEvening(route) {
           h('span', { class: 'badge rose', 'aria-hidden': 'true' }, icon('heart', 16)),
           h('label', { for: 'good' }, gv.question)),
         h('div', { class: 'body-sm indent' }, T.common.optional)),
-      card('', textField({
-        id: 'good', value: ev.good.text, placeholder: gv.placeholder, rows: gv.rows,
+      card('', goodsToday, textField({
+        id: 'good', value: ev.good.text, placeholder: gv.placeholder, rows: gv.rows, describedby: goodsToday ? 'good-day' : null,
         onInput: (v) => { ev.good.text = textOrNull(v); save(true); }
       })),
       h('div', { class: 'stack-4' },

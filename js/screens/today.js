@@ -7,7 +7,8 @@ import { logicalDate, dayNumber, weekdayLong, dayMonth, timeOfIso } from '../dat
 import { phaseOf, isCounted, exportDue, weekView, countedInExperiment } from '../rules.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
 import { checkPersist } from '../actions.js';
-import { go, refresh, eveningHash, testHash } from '../nav.js';
+import { go, refresh, eveningHash, testHash, dayEventHash } from '../nav.js';
+import { takeFlash } from './dayevent.js';
 import { renderPrep } from './prep.js';
 import { stateOf, ellisFile, draftAnswered } from './testcommon.js';
 
@@ -88,6 +89,16 @@ function eveningCard(today, after) {
     button(label, open, { kind: 'on-accent', fk: 'evening-start' }));
 }
 
+// Быстрая запись днём (CONTENT.md, «События дня»): «Записать событие» и более тихая «Записать хорошее».
+// Без счётчиков и подсказок о количестве. После сохранения — короткое сообщение над кнопками.
+function dayActions() {
+  const saved = takeFlash();
+  return h('div', { class: 'stack-8 day-actions' },
+    saved ? h('div', { class: 'ok-line', role: 'status' }, icon('check', 16), saved) : null,
+    button(T.day.eventBtn, () => go(dayEventHash('event')), { kind: 'secondary', fk: 'day-event' }),
+    h('button', { type: 'button', class: 'link-btn', 'data-fk': 'day-good', onclick: () => go(dayEventHash('good')) }, T.day.goodBtn));
+}
+
 function installCard(today) {
   if (isStandalone() || S.ui.install_later === today) return null;
   const later = () => { setUi('install_later', today); refresh(); };
@@ -157,10 +168,11 @@ export function renderToday() {
           h('div', { class: 'body-sm' }, T.today.finalExportText(countedInExperiment(S)))),
         button(T.today.exportBtn, () => go('#/data'), { kind: 'on-accent' })),
       testCards(),
+      dayActions(),
       eveningCard(today, true)
     ];
   } else {
-    body = [morningCard(today), testCards(), eveningCard(today, false), installCard(today), exportCard(today, day), weekCard(today), habitsBlock(today)];
+    body = [morningCard(today), testCards(), dayActions(), eveningCard(today, false), installCard(today), exportCard(today, day), weekCard(today), habitsBlock(today)];
   }
 
   const meta = phase === 'after'

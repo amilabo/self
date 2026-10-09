@@ -7,7 +7,9 @@ import { plural } from './util.js';
 import { lastExport } from './rules.js';
 
 const byKey = (k) => (a, b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0);
-const ARRAYS = ['habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports'];
+// day_events (0.1.6) — необязательный массив: в файлах до 0.1.6 его нет, импорт читает его как пустой.
+// schema_version не меняется (PRD §6.4: новое необязательное поле — минорное изменение).
+const ARRAYS = ['habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports', 'day_events'];
 
 export function buildExport(snap, nowIso) {
   const last = lastExport(snap);
@@ -26,7 +28,8 @@ export function buildExport(snap, nowIso) {
     skip_reports: [...snap.skips.values()].sort(byKey('first_missed_date')),
     safety_signals: [...snap.signals].sort(byKey('at')),
     test_results: [...snap.tests].sort(byKey('taken_at')),
-    exports: [...snap.exports].sort(byKey('at'))
+    exports: [...snap.exports].sort(byKey('at')),
+    day_events: [...(snap.dayEvents ? snap.dayEvents.values() : [])].sort(byKey('recorded_at'))
   };
 }
 
@@ -99,7 +102,8 @@ const VALIDATORS = {
   skip_reports: (x) => isYmd(x.first_missed_date),
   safety_signals: (x) => typeof x.id === 'string' && isYmd(x.date),
   test_results: (x) => typeof x.id === 'string',
-  exports: (x) => typeof x.id === 'string' && typeof x.at === 'string'
+  exports: (x) => typeof x.id === 'string' && typeof x.at === 'string',
+  day_events: (x) => typeof x.id === 'string' && isYmd(x.date) && (x.kind === 'event' || x.kind === 'good') && typeof x.recorded_at === 'string'
 };
 
 // Возвращает { data } или { error: 'read' | 'format' | 'newer' | 'broken' }.
@@ -138,12 +142,14 @@ export function summarize(evenings, mornings) {
   return { count: evenings.length, label: eveningsLabel(evenings.length), last: last ? dayMonth(last) : null };
 }
 
-// Даты, которые есть только на телефоне и пропадут после замены.
+// Даты, которые есть только на телефоне и пропадут после замены (в том числе даты событий дня, которых нет в файле).
 export function onlyOnPhone(snap, data) {
   const fileEv = new Set(data.evenings.map((e) => e.date));
   const fileMo = new Set(data.mornings.map((m) => m.date));
+  const fileDay = new Set((data.day_events || []).map((r) => r.id));
   const dates = new Set();
   for (const d of snap.evenings.keys()) if (!fileEv.has(d)) dates.add(d);
   for (const d of snap.mornings.keys()) if (!fileMo.has(d)) dates.add(d);
+  for (const r of (snap.dayEvents ? snap.dayEvents.values() : [])) if (!fileDay.has(r.id)) dates.add(r.date);
   return [...dates].sort();
 }

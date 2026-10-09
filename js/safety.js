@@ -46,6 +46,11 @@ export function eveningFields(ev, step, skipRec) {
   return f.filter((x) => x.text.trim() !== '');
 }
 
+// Поля связанной с событием ABC, которые вводятся только вечером (при «Нет, дальше» удаляются только они).
+export function abcEveningFields(abc) {
+  return abcFields(abc).filter((x) => x.field === 'abc.c_behavior' || x.field === 'abc.e_belief');
+}
+
 export function abcFields(abc) {
   const other = (abc.c_emotions || []).map((e) => txt(e.other_text)).join(' ');
   return [
@@ -119,6 +124,7 @@ export function emotionTrigger(ev) {
 // --- Решение при сохранении шага: «Кризис» и «Высокий» ---
 // opts: date, fields, checkMood (шаг 1), crisisEvening (в этот вечер уже был «Кризис»),
 // deleted (проверка черновика перед «Удалить и дальше»), shownHashes, nowIso, makeId.
+// У поля может быть key — отпечаток «уже показано» хранится по нему (события дня: поле + id записи).
 export function decideStepSignals(snap, opts) {
   const { date, fields, checkMood, crisisEvening, deleted, nowIso, makeId } = opts;
   const shownHashes = opts.shownHashes || {};
@@ -131,7 +137,7 @@ export function decideStepSignals(snap, opts) {
   const hits = fields.map((f) => ({ ...f, ...scanText(f.text), hash: hashText(f.text) }));
 
   for (const h of hits.filter((x) => x.crisis)) {
-    const key = `crisis|${h.field}`;
+    const key = `crisis|${h.key || h.field}`;
     const existing = findRecord(snap.signals, date, 'crisis', ['keywords'], h.field);
     // «Кризис» показывается каждый раз, но не повторяется для того же, неизменённого текста:
     // иначе окно не выпускало бы дальше по кругу.
@@ -143,7 +149,7 @@ export function decideStepSignals(snap, opts) {
   const crisisNow = crisisEvening || showCrisis;
 
   for (const h of hits.filter((x) => x.hopelessness)) {
-    const key = `high|${h.field}`;
+    const key = `high|${h.key || h.field}`;
     const existing = findRecord(snap.signals, date, 'high', ['keywords'], h.field);
     if (existing && existing.shown && shownHashes[key] === h.hash && !deleted) continue;
     const show = !crisisNow;

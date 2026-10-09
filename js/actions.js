@@ -36,7 +36,8 @@ export async function checkPersist() {
 }
 
 // Записывает решения decideStepSignals и ставит флаг «Кризис» на вечер.
-export function applyStepSignals(res, date, ev) {
+// silent: флаг ставится не из круга (быстрая запись днём) — у завершённого круга не меняется edited_at.
+export function applyStepSignals(res, date, ev, { silent = false } = {}) {
   for (const rec of res.upserts) putSignal(rec);
   if (Object.keys(res.newHashes).length) {
     const all = { ...(S.ui.shown_hashes || {}) };
@@ -46,7 +47,7 @@ export function applyStepSignals(res, date, ev) {
   if (res.setCrisis && ev && !ev.crisis) {
     ev.crisis = true;
     putMark(date, 'evening_reflection', true, 'auto');
-    saveEvening(ev);
+    saveEvening(ev, { silent });
   }
 }
 

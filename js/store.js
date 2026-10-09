@@ -18,6 +18,7 @@ export const S = {
   signals: [],
   tests: [],
   exports: [],
+  dayEvents: new Map(), // id → day_event (события дня и «хорошее днём», 0.1.6)
   ui: {},                // состояние интерфейса, в экспорт не попадает
   privateTests: {}       // test_id → загруженный текст теста (Эллис); не экспортируется, импорт не трогает
 };
@@ -61,10 +62,10 @@ export function flushPending() {
 }
 
 async function readAll() {
-  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui, priv] = await Promise.all([
+  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui, priv, dayEvents] = await Promise.all([
     db.getAll('experiment'), db.getAll('habits'), db.getAll('habit_marks'), db.getAll('mornings'),
     db.getAll('evenings'), db.getAll('skip_reports'), db.getAll('safety_signals'), db.getAll('test_results'),
-    db.getAll('exports'), db.getEntries('ui'), db.getEntries('private_tests')
+    db.getAll('exports'), db.getEntries('ui'), db.getEntries('private_tests'), db.getAll('day_events')
   ]);
   S.experiment = exp[0] || null;
   S.habits = habits.sort((a, b) => a.order - b.order);
@@ -77,6 +78,7 @@ async function readAll() {
   S.signals = signals;
   S.tests = tests;
   S.exports = exports.sort((a, b) => (a.at < b.at ? -1 : 1));
+  S.dayEvents = new Map(dayEvents.map((r) => [r.id, r]));
   S.ui = Object.fromEntries(ui);
   S.privateTests = Object.fromEntries(priv);
 }
@@ -89,7 +91,7 @@ export async function loadAll({ onBlocked } = {}) {
 
 // Есть ли утренние или вечерние записи (от них зависит, можно ли менять дату старта).
 export function hasUserData() {
-  return S.mornings.size > 0 || S.evenings.size > 0;
+  return S.mornings.size > 0 || S.evenings.size > 0 || S.dayEvents.size > 0;
 }
 
 // Есть ли что терять при замене или удалении: записи дня или результаты тестов (нужен бэкап).
@@ -124,8 +126,13 @@ export function saveMorning(m, { debounce = false } = {}) {
 }
 
 // touch: false — только замер времени (сворачивание страницы), отметки времени не меняются.
-export function saveEvening(ev, { debounce = false, touch = true } = {}) {
-  if (touch) {
+// silent: true — служебная отметка без правки содержания (флаг «Кризис» от быстрой записи днём):
+// updated_at меняется, edited_at завершённого круга — нет.
+export function saveEvening(ev, { debounce = false, touch = true, silent = false } = {}) {
+  if (silent) {
+    ev.updated_at = isoLocal();
+    if (ev.completed_at != null) prints.set(ev.date, eveningPrint(ev));
+  } else if (touch) {
     const p = stampEvening(ev, prints.get(ev.date), isoLocal());
     if (p === undefined) prints.delete(ev.date); else prints.set(ev.date, p);
   }
@@ -159,13 +166,21 @@ export function addExport(rec) {
   return write('exports', rec);
 }
 
-export function setUi(key, value) {
+export function setUi(key, value, { debounce = false } = {}) {
   S.ui[key] = value;
-  return write('ui', value, key);
+  return schedule(`u|${key}`, 'ui', value, key, debounce);
+}
+
+// События дня: запись по id (UUID). debounce — при наборе текста (правки связанной ABC вечером).
+export function putDayEvent(rec, { debounce = false } = {}) {
+  S.dayEvents.set(rec.id, rec);
+  return schedule(`d|${rec.id}`, 'day_events', rec, undefined, debounce);
 }
 
 export function clearUi(key) {
   delete S.ui[key];
+  const p = pending.get(`u|${key}`);
+  if (p) { clearTimeout(p.timer); pending.delete(`u|${key}`); }
   return db.delete('ui', key).catch((e) => { S.writeError = true; console.error('Ошибка записи', 'ui', e); });
 }
 

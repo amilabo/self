@@ -2,7 +2,7 @@
 // Без фреймворка: экран собирается функцией, при нажатиях экран пересобирается целиком,
 // а при наборе текста обновляются только зависимые части — чтобы не сбивать клавиатуру.
 
-import { T } from './content.js';
+import { T, EMOTION_GROUPS } from './content.js';
 
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);
@@ -121,6 +121,34 @@ export function chips(options, isOn, onToggle, fk) {
       onclick: () => onToggle(name)
     }, on ? icon('check', 16) : null, name);
   }));
+}
+
+// Группы эмоций (CONTENT.md, список v2) с кнопкой «Ещё эмоции» — в круге и в быстрой записи днём.
+// Выбранное никогда не прячется: свёрнутая группа с выбранной эмоцией видна и в свёрнутом виде.
+// open — раскрыты ли свёрнутые группы, onOpen(next) — переключение.
+export function emotionGroups({ isSel, onToggle, open, onOpen, fk = 'emo', moreId = 'more-emotions' }) {
+  const groupBlock = (g) => h('div', { class: 'stack-8' },
+    h('div', { class: 'overline' }, g.name),
+    chips(g.items, isSel, onToggle, fk));
+  const main = EMOTION_GROUPS.filter((g) => !g.collapsed);
+  const extraVisible = [];
+  const hidden = [];
+  for (const g of EMOTION_GROUPS.filter((x) => x.collapsed)) {
+    if (open || g.items.some(isSel)) extraVisible.push(g); else hidden.push(g.hint);
+  }
+  let moreHint = open ? T.step2.collapse : hidden.join(', ');
+  if (!open && moreHint) moreHint = moreHint.charAt(0).toUpperCase() + moreHint.slice(1);
+  const moreBtn = (open || hidden.length) ? h('button', {
+    type: 'button', class: 'more-btn', 'aria-expanded': open ? 'true' : 'false', 'aria-controls': moreId, 'data-fk': 'more',
+    onclick: () => onOpen(!open)
+  },
+  h('span', { class: 'stack-4' }, h('span', { class: 'more-title' }, T.step2.more), h('span', { class: 'caption' }, moreHint)),
+  icon(open ? 'chevronUp' : 'chevronDown')) : null;
+  return [
+    main.map(groupBlock),
+    moreBtn,
+    extraVisible.length ? h('div', { id: moreId, class: 'stack-16' }, extraVisible.map(groupBlock)) : null
+  ];
 }
 
 // Многострочное или однострочное поле. Значение в модель пишет onInput.

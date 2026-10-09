@@ -1,5 +1,6 @@
 // Маршруты на hash: #/today, #/morning, #/evening/2026-10-12/1, #/help, #/data, #/tests,
 // #/test/gad7[/today] (прохождение теста), #/result/<id>[/today] (результат). /today — вернуться на «Сегодня».
+// События дня: #/event/new, #/event/<id> (дописать), #/good/new; суффикс /evening — вернуться на шаг 2 круга.
 // Хранит короткий стек переходов, чтобы «назад» с экрана помощи возвращал туда, откуда пришли.
 
 let afterRender = null;
@@ -16,6 +17,9 @@ export function parseRoute(hash = location.hash) {
   }
   if (name === 'test') return { name, testId: parts[1] || null, from: parts[2] === 'today' ? 'today' : 'tests' };
   if (name === 'result') return { name, id: parts[1] || null, from: parts[2] === 'today' ? 'today' : 'tests' };
+  if (name === 'event' || name === 'good') {
+    return { name, id: parts[1] && parts[1] !== 'new' ? parts[1] : null, from: parts[2] === 'evening' ? 'evening' : 'today' };
+  }
   return { name };
 }
 
@@ -24,6 +28,7 @@ export const resultHash = (id, from = 'tests') => `#/result/${id}${from === 'tod
 export const fromHash = (from) => (from === 'today' ? '#/today' : '#/tests');
 
 export const eveningHash = (date, step) => `#/evening/${date}/${step}`;
+export const dayEventHash = (kind, id = null, from = 'today') => `#/${kind}/${id || 'new'}${from === 'evening' ? '/evening' : ''}`;
 
 // after — что сделать после отрисовки нового экрана (например, показать окно безопасности).
 // skipLeaveCheck — шаг уже проверен перед переходом, повторная проверка не нужна.

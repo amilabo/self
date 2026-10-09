@@ -271,3 +271,12 @@ input.field[aria-invalid="true"] { padding: 0 11px; }
 .rank-list { margin: 0; padding: 4px 16px; list-style: none; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-card); }
 .rank-list li { display: flex; align-items: center; min-height: 48px; padding: 12px 0; font-size: 16px; line-height: 1.45; font-weight: 600; }
 .rank-list li + li { border-top: 1px solid var(--border-subtle); }
+
+/* События дня (0.1.6): кнопки на «Сегодня», список событий на шаге 2 */
+.day-actions .link-btn { align-self: center; }
+.ev-item { display: flex; align-items: center; gap: 8px; }
+.ev-item .opt-row { flex: 1; min-width: 0; }
+.ev-item .opt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ev-edit { flex: none; align-self: center; }
+.opt-row:disabled { background: var(--surface-muted); color: var(--text-tertiary); cursor: default; }
+.cell:disabled { background: var(--surface-muted); color: var(--text-tertiary); border-color: var(--surface-muted); cursor: default; }
