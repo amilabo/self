@@ -6,7 +6,7 @@ import { h, region, card, button, scale10, segments, chips, textField, otherFiel
 import { T, SKIP_OPTIONS, FRICTION_OPTIONS, FRICTION_NONE, OTHER, EMOTION_GROUPS, YES_PARTLY_NO, NOW_OPTIONS, GOOD_VARIANTS, QUESTION_SET_VERSION, HABIT_HINTS } from '../content.js';
 import { S, saveEvening, putMark, putSkip, putSignal, putDayEvent, markKey, setUi, clearUi, flushPending } from '../store.js';
 import { logicalDate, dayNumber, isoLocal, isYmd, timeOfIso } from '../dates.js';
-import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
+import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, afterOpen, afterPending, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
 import { decideStepSignals, decideAttention, eveningFields, abcFields, abcEveningFields } from '../safety.js';
 import { dayEventsOf, eventLine, abcFromEvent, eventFromAbc, abcEveningStarted, canEditDayEvent, dayCrisis } from '../dayevents.js';
 import { applyStepSignals, signalContext } from '../actions.js';
@@ -23,6 +23,9 @@ const moreOpen = new Map();
 // Событие дня, выбранное в списке шага 2 до «Разобрать выбранное» (date → id). Только на время шага:
 // при следующем открытии ничего не выбрано заранее.
 const picked = new Map();
+// Прокрутка к «Сила сейчас» после ухода из поля E уже была (date) — один раз за показ шага 2.
+// Перерисовки внутри шага флаг не сбрасывают, уход с шага — сбрасывает.
+const afterNudged = new Set();
 
 const hint = (text) => h('div', { class: 'caption center' }, text);
 const byOrder = (list) => (a, b) => list.indexOf(a) - list.indexOf(b);
@@ -125,6 +128,7 @@ export function renderEvening(route) {
       });
       return;
     }
+    afterNudged.delete(date);
     if (beforeGo) beforeGo();
     if (target === 'finish') complete();
     else if (target === 'exit') { endEdit(); go('#/today', { skipLeaveCheck: true }); }
@@ -426,10 +430,17 @@ export function renderEvening(route) {
       }))) : null;
 
     let hadE = !isBlank(abc.e_belief);
+    // Блок «Сила сейчас» виден, как только выбраны эмоции (0.1.9): пока E пусто — заголовок и подпись-заглушка,
+    // шкал нет (не появляются внезапно ниже поля E, за клавиатурой). Шкалы — когда E записано.
     const after = region(() => {
-      if (isBlank(abc.e_belief) || !emotions.length) return null;
+      if (!emotions.length) return null;
+      if (!afterOpen(abc)) {
+        return h('div', { id: 'after-block', class: 'stack-8 divider', 'data-state': 'wait' },
+          h('div', { class: 'label' }, T.step2.afterTitle),
+          h('div', { class: 'caption' }, T.step2.afterWait));
+      }
       // Прежнее значение («было 7») не показываем — ни в подписи, ни в aria.
-      return h('div', { class: 'stack-12 divider' },
+      return h('div', { id: 'after-block', class: 'stack-12 divider' },
         h('div', { class: 'label' }, T.step2.afterTitle),
         emotions.map((e) => strengthScale({
           label: sliderLabel(e), value: e.after, ariaLabel: T.step2.afterAria(sliderLabel(e)), fk: `after-${e.name}`, emo: e.name,
@@ -437,6 +448,25 @@ export function renderEvening(route) {
         })),
         h('div', { class: 'caption' }, T.step2.afterNote));
     });
+
+    // Ушли из поля E, а «Сила сейчас» ещё не оценена: один раз за показ шага мягко прокрутить к шкалам.
+    // Если фокус ушёл на другой элемент (кнопку «Далее», шкалу, поле) — человек сам выбрал, куда идти: не уводим.
+    // Пауза — чтобы успела убраться клавиатура и сменилась высота экрана. «Далее» не блокируется.
+    const nudgeAfter = (e) => {
+      if (afterNudged.has(date) || !afterPending(abc) || (e && e.relatedTarget)) return;
+      setTimeout(() => {
+        const box = after.firstElementChild; // .region — display: contents, своей рамки нет
+        if (afterNudged.has(date) || !box || !box.isConnected || !afterPending(abc)) return;
+        const act = document.activeElement;
+        if (act && act !== document.body && act.matches('input, textarea')) return;
+        afterNudged.add(date);
+        const r = box.getBoundingClientRect();
+        const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        if (r.top >= 0 && r.bottom <= vh - 96) return; // уже на виду (с запасом на закреплённую «Далее»)
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        box.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+      }, 250);
+    };
 
     const setText = (key) => (v) => { abc[key] = textOrNull(v); saveAbc(true); };
     // У выбранного события дня — когда оно записано (CONTENT.md, тексты «Вечер, шаг 2»).
@@ -491,7 +521,8 @@ export function renderEvening(route) {
                 if (!hasE) emotions.forEach((x) => { x.after = null; });
                 save(true);
                 if (hasE !== hadE) { hadE = hasE; after.update(); }
-              }
+              },
+              onBlur: nudgeAfter
             })),
           after)),
       footer
@@ -596,6 +627,7 @@ export function renderEvening(route) {
   return {
     el,
     leave: () => {
+      afterNudged.delete(date);
       if (checked) return null;
       const show = runCheck();
       if (parseRoute().name !== 'evening') endEdit();

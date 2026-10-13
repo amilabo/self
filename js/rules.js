@@ -69,6 +69,16 @@ export function deDone(abc) {
   return ['d_evidence', 'd_usefulness', 'd_friend', 'e_belief'].some((k) => nonEmpty(abc[k]));
 }
 
+// Повторная оценка «Сила сейчас» доступна, когда выбраны эмоции и записано E.
+export function afterOpen(abc) {
+  return !!abc && (abc.c_emotions || []).length > 0 && nonEmpty(abc.e_belief);
+}
+
+// Подсказать прокруткой к «Сила сейчас» (уход из поля E, 0.1.9): оценка доступна, но ни одной ещё нет.
+export function afterPending(abc) {
+  return afterOpen(abc) && abc.c_emotions.every((e) => e.after == null);
+}
+
 export function emptyAbc() {
   return { a_event: null, c_emotions: [], c_behavior: null, b_belief: null, d_evidence: null, d_usefulness: null, d_friend: null, e_belief: null };
 }

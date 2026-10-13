@@ -5,7 +5,7 @@
 
 export const QUESTION_SET_VERSION = 4; // v4 (2026-10-09): события дня и «хорошее днём»; v3 — тесты GAD-7 и Эллиса; v2 — новый список привычек
 export const SCHEMA_VERSION = 1;
-export const APP_VERSION = '0.1.8';
+export const APP_VERSION = '0.1.9';
 export const EXPORT_FORMAT = 'self-reflection-export';
 export const EXPERIMENT_LENGTH = 21;
 export const DAY_BOUNDARY = '04:00';
@@ -320,6 +320,7 @@ export const T = {
     ePh: 'Например: «Мне неприятно, что…, но это не значит, что…»',
     afterTitle: 'Сила сейчас, от 0 до 10',
     afterAria: (name) => `Сила сейчас: ${name}`,
+    afterWait: 'Оценить после того, как запишете E',
     afterNote: 'Если почти не изменилась — это нормально. Цель не в том, чтобы перестать чувствовать, а в том, чтобы эмоция стала соразмерной ситуации.',
     needOther: 'Чтобы продолжить, заполните поле «Что именно?»',
     draftTitle: 'Черновик записи не сохранится',
