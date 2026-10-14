@@ -422,12 +422,16 @@ export function renderEvening(route) {
     const otherLabel = () => (otherEmotion && !isBlank(otherEmotion.other_text) ? otherEmotion.other_text.trim() : OTHER);
     const sliderLabel = (e) => (e.name === OTHER ? otherLabel() : e.name);
 
-    const before = emotions.length ? h('div', { class: 'stack-12 divider' },
-      h('div', { class: 'label' }, T.step2.strengthTitle),
-      emotions.map((e) => strengthScale({
-        label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
-        onSet: (v) => { e.before = v; saveAbc(); }
-      }))) : null;
+    // Сила «в тот момент» — отдельной карточкой после B (0.2.0): не разрывает цепочку «почувствовала → подумала».
+    // Пока эмоции не выбраны — подпись-заглушка вместо шкал.
+    const before = h('div', { class: 'stack-12', role: 'group', 'aria-labelledby': 'c-strength-title', 'data-state': emotions.length ? null : 'wait' },
+      h('div', { class: 'q-label', id: 'c-strength-title' }, badge('C'), T.step2.strengthTitle),
+      emotions.length
+        ? emotions.map((e) => strengthScale({
+          label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
+          onSet: (v) => { e.before = v; saveAbc(); }
+        }))
+        : h('div', { class: 'caption indent', 'data-fk': 'strength-wait' }, T.step2.strengthWait));
 
     let hadE = !isBlank(abc.e_belief);
     // Блок «Сила сейчас» виден, как только выбраны эмоции (0.1.9): пока E пусто — заголовок и подпись-заглушка,
@@ -495,17 +499,19 @@ export function renderEvening(route) {
               // Подпись шкал «другое» — словами пользователя, сразу при наборе.
               document.querySelectorAll(`[data-emo="${OTHER}"]`).forEach((n) => { n.textContent = otherLabel(); });
             }
-          }) : null,
-          before,
-          h('div', { class: 'stack-8 divider' },
-            h('label', { for: 'did', class: 'label' }, T.step2.behaviorQ),
-            textField({ id: 'did', value: abc.c_behavior, single: true, onInput: setText('c_behavior') }))),
+          }) : null),
 
         card('gap-8',
           h('div', { class: 'stack-4' },
             h('label', { for: 'b', class: 'q-label' }, badge('B'), T.step2.bQ),
             h('div', { id: 'b-hint', class: 'caption indent' }, T.step2.bHint)),
-          textField({ id: 'b', value: abc.b_belief, rows: 2, describedby: 'b-hint', onInput: setText('b_belief') })),
+          textField({ id: 'b', value: abc.b_belief, placeholder: T.step2.bPh, rows: 2, describedby: 'b-hint', onInput: setText('b_belief') })),
+
+        card('gap-16',
+          before,
+          h('div', { class: 'stack-8 divider' },
+            h('label', { for: 'did', class: 'label' }, T.step2.behaviorQ),
+            textField({ id: 'did', value: abc.c_behavior, single: true, onInput: setText('c_behavior') }))),
 
         card('dashed gap-16',
           h('div', { class: 'stack-8' },

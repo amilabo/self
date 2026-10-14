@@ -1,4 +1,5 @@
-// Быстрая запись днём (CONTENT.md, «События дня»): событие (A, эмоции с силой 0–10, B) и «хорошее» одной строкой.
+// Быстрая запись днём (CONTENT.md, «События дня»): событие (A, эмоции, B, сила эмоций 0–10 — порядок 0.2.0)
+// и «хорошее» одной строкой.
 // Всё по желанию; «Сохранить» активна, если заполнено хоть одно поле или выбрана эмоция. Время записи ставится само
 // и не меняется при дописывании. Дописать можно до 04:00 (маршрут #/event/<id>).
 // Тексты проверяются на сигналы так же, как поля ABC; окно «Кризис» — вариант «Утро», флаг — на вечер этого дня.
@@ -189,16 +190,20 @@ export function renderDayEvent(route) {
             footer.update();
             document.querySelectorAll(`[data-emo="${OTHER}"]`).forEach((n) => { n.textContent = otherLabel(); });
           }
-        }) : null,
-        emotions.length ? h('div', { class: 'stack-12 divider' },
-          h('div', { class: 'label' }, T.day.strengthTitle),
-          emotions.map((e) => strengthScale({
-            label: scaleLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(scaleLabel(e)), fk: `q-before-${e.name}`, emo: e.name,
-            onSet: (v) => { e.before = v; keepDraft(false); }
-          }))) : null),
+        }) : null),
       card('gap-8',
         h('label', { for: 'qb', class: 'q-label' }, badge('B'), T.day.bQ),
-        textField({ id: 'qb', value: draft.b_belief, placeholder: T.day.bPh, rows: 2, onInput: onText('b_belief') }))
+        textField({ id: 'qb', value: draft.b_belief, placeholder: T.day.bPh, rows: 2, onInput: onText('b_belief') })),
+      // Сила — после B, как в круге (0.2.0). Пока эмоции не выбраны — подпись вместо шкал.
+      card('',
+        h('div', { class: 'stack-12', role: 'group', 'aria-labelledby': 'qc-strength-title', 'data-state': emotions.length ? null : 'wait' },
+          h('div', { class: 'q-label', id: 'qc-strength-title' }, badge('C'), T.day.strengthTitle),
+          emotions.length
+            ? emotions.map((e) => strengthScale({
+              label: scaleLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(scaleLabel(e)), fk: `q-before-${e.name}`, emo: e.name,
+              onSet: (v) => { e.before = v; keepDraft(false); }
+            }))
+            : h('div', { class: 'caption indent', 'data-fk': 'q-strength-wait' }, T.step2.strengthWait)))
     ];
   }
 
