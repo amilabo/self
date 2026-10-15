@@ -1,9 +1,9 @@
-// IndexedDB: одно хранилище на сущность PRD §6.2 (с 0.1.6 и day_events — события дня), `ui` для состояния интерфейса и `private_tests`
+// IndexedDB: одно хранилище на сущность PRD §6.2 (с 0.1.6 и day_events — события дня, с v4 — reviews, итоги разборов), `ui` для состояния интерфейса и `private_tests`
 // для загруженного текста теста Эллиса (оба не экспортируются, импорт их не трогает). Если IndexedDB недоступна (например, страница открыта в песочнице),
 // работает запасной вариант в памяти — форма об этом предупреждает.
 
 const DB_NAME = 'self-form';
-const DB_VERSION = 3; // v2: + private_tests; v3 (0.1.6): + day_events
+const DB_VERSION = 4; // v2: + private_tests; v3 (0.1.6): + day_events; v4 (2026-10-15): + reviews (итоги недельного разбора)
 
 // keyPath хранилищ. null — ключ передаётся отдельно (experiment — 'main', ui — имя настройки).
 const STORE_KEYS = {
@@ -17,11 +17,12 @@ const STORE_KEYS = {
   test_results: 'id',
   exports: 'id',
   day_events: 'id',
+  reviews: 'review_id',
   ui: null,
   private_tests: null // ключ — test_id ('ellis')
 };
 
-export const DATA_STORES = ['experiment', 'habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports', 'day_events'];
+export const DATA_STORES = ['experiment', 'habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports', 'day_events', 'reviews'];
 
 function reqP(req) {
   return new Promise((resolve, reject) => {

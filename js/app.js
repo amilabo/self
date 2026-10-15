@@ -15,6 +15,7 @@ import { renderTests } from './screens/tests.js';
 import { renderTestRun } from './screens/testrun.js';
 import { renderTestResult } from './screens/testresult.js';
 import { renderDayEvent } from './screens/dayevent.js';
+import { renderReview } from './screens/review.js';
 
 // В одностраничном превью (tools/build_preview.py) заменяется на true: без service worker.
 const PREVIEW = false;
@@ -22,7 +23,7 @@ const PREVIEW = false;
 const SCREENS = {
   today: renderToday, morning: renderMorning, evening: renderEvening, help: renderHelp, data: renderData,
   tests: renderTests, test: renderTestRun, result: renderTestResult,
-  event: renderDayEvent, good: renderDayEvent
+  event: renderDayEvent, good: renderDayEvent, review: renderReview
 };
 let current = null;
 

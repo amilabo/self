@@ -1,7 +1,8 @@
 // Действия, которые затрагивают данные и нужны нескольким экранам:
 // создание эксперимента, запись сигналов безопасности, экспорт, импорт, тесты.
 
-import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasAnyRecords, setUi, clearUi, wipeAllData, putTestResult, savePrivateTest } from './store.js';
+import { S, saveExperiment, ensureHabits, putSignal, putMark, saveEvening, addExport, replaceAllData, hasAnyRecords, setUi, clearUi, wipeAllData, putTestResult, savePrivateTest, putReview, removeReview } from './store.js';
+import { parseReviewText, planReviewSave, reviewRecord } from './reviews.js';
 import { EXPERIMENT_LENGTH, DAY_BOUNDARY, T } from './content.js';
 import { isoLocal, dayMonth } from './dates.js';
 import { uuid } from './util.js';
@@ -248,6 +249,59 @@ export async function unlockEllis(password) {
     return false;
   }
   return keepEllis(parsed.test, T.tests.ellisUnlocked);
+}
+
+// --- Итоги недельного разбора (DECISIONS 2026-10-15) ---
+// Тексты ошибок и подтверждений — на экранах (этап 2); здесь только коды и статусы.
+
+// Строка статуса карточки «Разборы недели» на «Данных» (ошибка загрузки, «удалён»); живёт до перезагрузки страницы.
+export const reviewStatus = { value: null };
+
+// Выбор файла итога и разбор. null — выбор файла отменён. Иначе — { error: 'file' } (файл не прочитан)
+// или результат parseReviewText: { review } | { error: 'empty' | 'read' | 'format' | 'newer' | 'broken', field? }.
+// Вставка текстом — тот же parseReviewText(text) из reviews.js, без этой функции.
+export async function readReviewFile() {
+  const file = await pickFile();
+  if (!file) return null;
+  let text;
+  try { text = await file.text(); } catch (e) { return { error: 'file' }; }
+  return parseReviewText(text);
+}
+
+// Сохранение проверенного итога. Не перезаписывает другой итог с тем же review_id:
+// { status: 'saved' } — сохранён; { status: 'same', existing } — тот же итог уже загружен, ничего не менялось;
+// { status: 'conflict', existing } — есть другой итог с этим review_id (экран спрашивает «Заменить?» → replaceReview);
+// { status: 'error' } — не удалось записать.
+export async function saveReview(review) {
+  const plan = planReviewSave(S.reviews, review);
+  if (plan.status !== 'new') return plan;
+  return writeReview(review);
+}
+
+// Замена итога с тем же review_id (после подтверждения). { status: 'saved' | 'error' }.
+export function replaceReview(review) {
+  return writeReview(review);
+}
+
+async function writeReview(review) {
+  try {
+    await putReview(reviewRecord(review, isoLocal()));
+  } catch (e) {
+    console.error(e);
+    return { status: 'error' };
+  }
+  return { status: 'saved' };
+}
+
+// Удаление итога. true — удалён (или его и не было), false — ошибка записи.
+export async function deleteReview(reviewId) {
+  try {
+    await removeReview(reviewId);
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+  return true;
 }
 
 export const draftKey = (testId) => `test_draft_${testId}`;

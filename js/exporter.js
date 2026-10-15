@@ -5,11 +5,14 @@ import { EXPORT_FORMAT, SCHEMA_VERSION, QUESTION_SET_VERSION, APP_VERSION, HABIT
 import { fileDate, fileStamp, isYmd, dayMonth } from './dates.js';
 import { plural } from './util.js';
 import { lastExport } from './rules.js';
+import { normalizeReview, sortReviews } from './reviews.js';
 
 const byKey = (k) => (a, b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0);
-// day_events (0.1.6) — необязательный массив: в файлах до 0.1.6 его нет, импорт читает его как пустой.
-// schema_version не меняется (PRD §6.4: новое необязательное поле — минорное изменение).
-const ARRAYS = ['habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports', 'day_events'];
+// day_events (0.1.6) — необязательный массив: в файлах до 0.1.6 его нет, импорт читает его как пустой
+// (schema_version тогда не менялась, PRD §6.4).
+// reviews (schema_version 2, решение 2026-10-15) — итоги недельных разборов; в файлах schema_version 1 их нет,
+// миграция v1 → v2 добавляет пустой массив.
+const ARRAYS = ['habits', 'habit_marks', 'mornings', 'evenings', 'skip_reports', 'safety_signals', 'test_results', 'exports', 'day_events', 'reviews'];
 
 export function buildExport(snap, nowIso) {
   const last = lastExport(snap);
@@ -29,7 +32,8 @@ export function buildExport(snap, nowIso) {
     safety_signals: [...snap.signals].sort(byKey('at')),
     test_results: [...snap.tests].sort(byKey('taken_at')),
     exports: [...snap.exports].sort(byKey('at')),
-    day_events: [...(snap.dayEvents ? snap.dayEvents.values() : [])].sort(byKey('recorded_at'))
+    day_events: [...(snap.dayEvents ? snap.dayEvents.values() : [])].sort(byKey('recorded_at')),
+    reviews: sortReviews(snap.reviews)
   };
 }
 
@@ -88,8 +92,10 @@ export async function shareFile(name, text) {
 
 // --- Импорт ---
 
-// Цепочка миграций v1 → v2 → … Пока версия одна.
+// Цепочка миграций v1 → v2 → … (PRD §6.4).
+// v1 → v2: появился массив reviews (итоги недельных разборов); в файле v1 его нет — итогов не было.
 function migrate(obj) {
+  if (obj.schema_version === 1) obj = { ...obj, schema_version: 2, reviews: [] };
   return obj;
 }
 
@@ -103,7 +109,9 @@ const VALIDATORS = {
   safety_signals: (x) => typeof x.id === 'string' && isYmd(x.date),
   test_results: (x) => typeof x.id === 'string',
   exports: (x) => typeof x.id === 'string' && typeof x.at === 'string',
-  day_events: (x) => typeof x.id === 'string' && isYmd(x.date) && (x.kind === 'event' || x.kind === 'good') && typeof x.recorded_at === 'string'
+  day_events: (x) => typeof x.id === 'string' && isYmd(x.date) && (x.kind === 'event' || x.kind === 'good') && typeof x.recorded_at === 'string',
+  // Итог проверяется тем же правилом, что файл разбора (reviews.js), плюс момент загрузки.
+  reviews: (x) => typeof x.imported_at === 'string' && !!normalizeReview(x).review
 };
 
 // Возвращает { data } или { error: 'read' | 'format' | 'newer' | 'broken' }.
@@ -142,14 +150,17 @@ export function summarize(evenings, mornings) {
   return { count: evenings.length, label: eveningsLabel(evenings.length), last: last ? dayMonth(last) : null };
 }
 
-// Даты, которые есть только на телефоне и пропадут после замены (в том числе даты событий дня, которых нет в файле).
+// Даты, которые есть только на телефоне и пропадут после замены (в том числе даты событий дня
+// и итогов разборов, которых нет в файле; у итога — дата разбора reviewed_at).
 export function onlyOnPhone(snap, data) {
   const fileEv = new Set(data.evenings.map((e) => e.date));
   const fileMo = new Set(data.mornings.map((m) => m.date));
   const fileDay = new Set((data.day_events || []).map((r) => r.id));
+  const fileRev = new Set((data.reviews || []).map((r) => r.review_id));
   const dates = new Set();
   for (const d of snap.evenings.keys()) if (!fileEv.has(d)) dates.add(d);
   for (const d of snap.mornings.keys()) if (!fileMo.has(d)) dates.add(d);
   for (const r of (snap.dayEvents ? snap.dayEvents.values() : [])) if (!fileDay.has(r.id)) dates.add(r.date);
+  for (const r of (snap.reviews ? snap.reviews.values() : [])) if (!fileRev.has(r.review_id)) dates.add(r.reviewed_at);
   return [...dates].sort();
 }

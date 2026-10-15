@@ -109,6 +109,23 @@ export function showImportConfirm({ fileLine, phoneLine, onlyPhoneLine, onCancel
     button(T.data.impConfirm, () => { closeOverlay(); onConfirm(); }, { large: true }))), { dismiss: cancel });
 }
 
+// Итог разбора (0.3.0): лист замены итога с тем же review_id. «Отмена» и тап по затемнению — ничего не меняется.
+export function showReviewReplace({ date, onConfirm, onCancel }) {
+  const cancel = () => { closeOverlay(); if (onCancel) onCancel(); };
+  openOverlay(sheet('rev-rep-title', T.reviews.replaceTitle(date), T.reviews.replaceText, h('div', { class: 'pair' },
+    button(T.reviews.replaceCancel, cancel, { kind: 'secondary', large: true }),
+    button(T.reviews.replaceConfirm, () => { closeOverlay(); onConfirm(); }, { large: true }))), { dismiss: cancel });
+}
+
+// Итог разбора: лист удаления. withAction — удаляется итог, чьё действие сейчас на «Сегодня».
+// «Удалить» — основная accent, без красного (DESIGN.md, «Лист подтверждения»).
+export function showReviewDelete({ date, withAction, onConfirm }) {
+  const text = withAction ? `${T.reviews.deleteText} ${T.reviews.deleteTextAction}` : T.reviews.deleteText;
+  openOverlay(sheet('rev-del-title', T.reviews.deleteTitle(date), text, h('div', { class: 'pair' },
+    button(T.reviews.deleteCancel, closeOverlay, { kind: 'secondary', large: true }),
+    button(T.reviews.deleteConfirm, () => { closeOverlay(); onConfirm(); }, { large: true }))), { dismiss: closeOverlay });
+}
+
 // Лист подтверждения «Удалить все данные».
 export function showWipeConfirm({ withBackup, onConfirm }) {
   const body = h('div', { class: 'stack-12' },

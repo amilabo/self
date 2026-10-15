@@ -7,8 +7,10 @@ import { logicalDate, dayNumber, weekdayLong, dayMonth, timeOfIso } from '../dat
 import { phaseOf, isCounted, exportDue, weekView, countedInExperiment } from '../rules.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
 import { checkPersist } from '../actions.js';
-import { go, refresh, eveningHash, testHash, dayEventHash } from '../nav.js';
+import { go, refresh, eveningHash, testHash, dayEventHash, reviewHash } from '../nav.js';
+import { latestReview } from '../reviews.js';
 import { takeFlash } from './dayevent.js';
+import { reviewDate } from './review.js';
 import { renderPrep } from './prep.js';
 import { stateOf, ellisFile, draftAnswered } from './testcommon.js';
 
@@ -126,6 +128,20 @@ function exportCard(today, day) {
       button(T.today.exportBtn, () => go('#/data'))));
 }
 
+// «Действие недели» (0.3.0, DESIGN.md «Итог разбора»): тихая карточка-ссылка по последнему итогу разбора,
+// если в нём выбрано действие. Без отметки «сделано» и без «Позже»: висит до следующего итога.
+function weekActionCard() {
+  const r = latestReview(S.reviews);
+  if (!r || !r.action) return null;
+  return h('a', { href: reviewHash(r.review_id, 'today'), class: 'card card-link link-row', 'data-fk': 'week-action' },
+    h('span', { class: 'stack-8 min0' },
+      h('span', { class: 'overline' }, T.reviews.todayOverline),
+      h('span', { class: 'stack-4' },
+        h('span', { class: 'quote clamp-3' }, `«${r.action}»`),
+        h('span', { class: 'caption' }, T.reviews.todayFrom(reviewDate(r))))),
+    icon('chevronRight', 24));
+}
+
 function weekCard(today) {
   const w = weekView(S, today);
   return card('',
@@ -171,10 +187,11 @@ export function renderToday() {
         button(T.today.exportBtn, () => go('#/data'), { kind: 'on-accent' })),
       testCards(),
       dayActions(),
-      eveningCard(today, true)
+      eveningCard(today, true),
+      weekActionCard()
     ];
   } else {
-    body = [morningCard(today), testCards(), dayActions(), eveningCard(today, false), installCard(today), exportCard(today, day), weekCard(today), habitsBlock(today)];
+    body = [morningCard(today), testCards(), dayActions(), eveningCard(today, false), installCard(today), exportCard(today, day), weekActionCard(), weekCard(today), habitsBlock(today)];
   }
 
   const meta = phase === 'after'

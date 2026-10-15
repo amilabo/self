@@ -19,7 +19,8 @@ export const S = {
   tests: [],
   exports: [],
   dayEvents: new Map(), // id → day_event (события дня и «хорошее днём», 0.1.6)
-  ui: {},                // состояние интерфейса, в экспорт не попадает
+  reviews: new Map(),   // review_id → итог недельного разбора (контракт self-review v1 + imported_at)
+  ui: {},               // состояние интерфейса, в экспорт не попадает
   privateTests: {}       // test_id → загруженный текст теста (Эллис); не экспортируется, импорт не трогает
 };
 
@@ -62,10 +63,10 @@ export function flushPending() {
 }
 
 async function readAll() {
-  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui, priv, dayEvents] = await Promise.all([
+  const [exp, habits, marks, mornings, evenings, skips, signals, tests, exports, ui, priv, dayEvents, reviews] = await Promise.all([
     db.getAll('experiment'), db.getAll('habits'), db.getAll('habit_marks'), db.getAll('mornings'),
     db.getAll('evenings'), db.getAll('skip_reports'), db.getAll('safety_signals'), db.getAll('test_results'),
-    db.getAll('exports'), db.getEntries('ui'), db.getEntries('private_tests'), db.getAll('day_events')
+    db.getAll('exports'), db.getEntries('ui'), db.getEntries('private_tests'), db.getAll('day_events'), db.getAll('reviews')
   ]);
   S.experiment = exp[0] || null;
   S.habits = habits.sort((a, b) => a.order - b.order);
@@ -79,6 +80,7 @@ async function readAll() {
   S.tests = tests;
   S.exports = exports.sort((a, b) => (a.at < b.at ? -1 : 1));
   S.dayEvents = new Map(dayEvents.map((r) => [r.id, r]));
+  S.reviews = new Map(reviews.map((r) => [r.review_id, r]));
   S.ui = Object.fromEntries(ui);
   S.privateTests = Object.fromEntries(priv);
 }
@@ -94,9 +96,9 @@ export function hasUserData() {
   return S.mornings.size > 0 || S.evenings.size > 0 || S.dayEvents.size > 0;
 }
 
-// Есть ли что терять при замене или удалении: записи дня или результаты тестов (нужен бэкап).
+// Есть ли что терять при замене или удалении: записи дня, результаты тестов или итоги разборов (нужен бэкап).
 export function hasAnyRecords() {
-  return hasUserData() || S.tests.length > 0;
+  return hasUserData() || S.tests.length > 0 || S.reviews.size > 0;
 }
 
 export function saveExperiment(exp) {
@@ -195,6 +197,18 @@ export function putTestResult(rec) {
 export async function savePrivateTest(test) {
   await db.put('private_tests', test, test.test_id);
   S.privateTests[test.test_id] = test;
+}
+
+// Итоги недельного разбора. Ошибку записи пробрасываем (экран покажет, что итог не сохранился);
+// снимок S меняется только после успешной записи.
+export async function putReview(rec) {
+  await db.put('reviews', rec);
+  S.reviews.set(rec.review_id, rec);
+}
+
+export async function removeReview(reviewId) {
+  await db.delete('reviews', reviewId);
+  S.reviews.delete(reviewId);
 }
 
 // Импорт: замена всех данных одной транзакцией, затем перечитываем снимок.
