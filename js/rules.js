@@ -69,14 +69,36 @@ export function deDone(abc) {
   return ['d_evidence', 'd_usefulness', 'd_friend', 'e_belief'].some((k) => nonEmpty(abc[k]));
 }
 
-// Повторная оценка «Сила сейчас» доступна, когда выбраны эмоции и записано E.
-export function afterOpen(abc) {
-  return !!abc && (abc.c_emotions || []).length > 0 && nonEmpty(abc.e_belief);
+// Шкала «Сила сейчас» для эмоции (0.2.1): только если сила «в тот момент» не 0.
+// «Не оценено» (before == null) — шкала есть: силу мы не знаем, а «не оценено» ≠ 0.
+// Уже введённую повторную оценку не прячем, даже если before потом поменяли на 0.
+export function afterEligible(e) {
+  return !!e && (e.before !== 0 || e.after != null);
 }
 
-// Подсказать прокруткой к «Сила сейчас» (уход из поля E, 0.1.9): оценка доступна, но ни одной ещё нет.
-export function afterPending(abc) {
-  return afterOpen(abc) && abc.c_emotions.every((e) => e.after == null);
+// Эмоции, для которых показывается шкала «Сила сейчас», в порядке выбора.
+// keep — имена эмоций, чья шкала уже показана в этом показе шага: она остаётся, пока не изменили
+// силу «в тот момент» этой эмоции (условие дизайнера 2026-10-15: снятие оценки «сейчас» у эмоции
+// с силой 0 не должно убирать шкалу из-под пальца). Экран сам убирает имя из keep при смене силы.
+export function afterEmotions(abc, keep = null) {
+  if (!abc) return [];
+  return (abc.c_emotions || []).filter((e) => afterEligible(e) || (!!keep && keep.has(e.name)));
+}
+
+// Блок «Сила сейчас» (заглушка до E или шкалы) виден, если есть хотя бы одна такая эмоция.
+export function afterShown(abc, keep = null) {
+  return afterEmotions(abc, keep).length > 0;
+}
+
+// Повторная оценка «Сила сейчас» доступна, когда блок виден и записано E.
+export function afterOpen(abc, keep = null) {
+  return afterShown(abc, keep) && nonEmpty(abc.e_belief);
+}
+
+// Подсказать прокруткой к «Сила сейчас» (уход из поля E, 0.1.9): оценка доступна, но ни одной
+// из показанных шкал ещё не оценено.
+export function afterPending(abc, keep = null) {
+  return afterOpen(abc, keep) && afterEmotions(abc, keep).every((e) => e.after == null);
 }
 
 export function emptyAbc() {

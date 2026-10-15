@@ -6,7 +6,7 @@ import { h, region, card, button, scale10, segments, chips, textField, otherFiel
 import { T, SKIP_OPTIONS, FRICTION_OPTIONS, FRICTION_NONE, OTHER, EMOTION_GROUPS, YES_PARTLY_NO, NOW_OPTIONS, GOOD_VARIANTS, QUESTION_SET_VERSION, HABIT_HINTS } from '../content.js';
 import { S, saveEvening, putMark, putSkip, putSignal, putDayEvent, markKey, setUi, clearUi, flushPending } from '../store.js';
 import { logicalDate, dayNumber, isoLocal, isYmd, timeOfIso } from '../dates.js';
-import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, afterOpen, afterPending, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
+import { isCounted, prevAction, skipInfo, goodVariant, abcStarted, abcDone, deDone, afterEmotions, afterOpen, afterPending, emptyAbc, newEvening, canEditEvening, finishEvening, editBase, restoreRequired } from '../rules.js';
 import { decideStepSignals, decideAttention, eveningFields, abcFields, abcEveningFields } from '../safety.js';
 import { dayEventsOf, eventLine, abcFromEvent, eventFromAbc, abcEveningStarted, canEditDayEvent, dayCrisis } from '../dayevents.js';
 import { applyStepSignals, signalContext } from '../actions.js';
@@ -26,6 +26,11 @@ const picked = new Map();
 // Прокрутка к «Сила сейчас» после ухода из поля E уже была (date) — один раз за показ шага 2.
 // Перерисовки внутри шага флаг не сбрасывают, уход с шага — сбрасывает.
 const afterNudged = new Set();
+// Шкалы «Сила сейчас», уже показанные в этом показе шага 2 (date → { abc, names }), 0.2.1.
+// Показанная шкала остаётся, пока не изменили силу «в тот момент» этой эмоции: снятие оценки «сейчас»
+// у эмоции с силой 0 не убирает шкалу из-под пальца (условие дизайнера, DESIGN.md «Шкала силы 0–10»).
+// Состав пересчитывается заново при уходе с шага, выборе эмоций, появлении или стирании E, смене ABC.
+const afterKeep = new Map();
 
 const hint = (text) => h('div', { class: 'caption center' }, text);
 const byOrder = (list) => (a, b) => list.indexOf(a) - list.indexOf(b);
@@ -129,6 +134,7 @@ export function renderEvening(route) {
       return;
     }
     afterNudged.delete(date);
+    afterKeep.delete(date);
     if (beforeGo) beforeGo();
     if (target === 'finish') complete();
     else if (target === 'exit') { endEdit(); go('#/today', { skipLeaveCheck: true }); }
@@ -415,6 +421,7 @@ export function renderEvening(route) {
         const group = EMOTION_GROUPS.find((g) => g.items.includes(name));
         emotions.push({ name, group: group ? group.name : null, other_text: null, before: null, after: null });
       }
+      keep.clear(); // выбор эмоций — состав «Сила сейчас» считается заново
       saveAbc();
       refresh();
     };
@@ -429,16 +436,37 @@ export function renderEvening(route) {
       emotions.length
         ? emotions.map((e) => strengthScale({
           label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
-          onSet: (v) => { e.before = v; saveAbc(); }
+          // Сила стала 0 (или перестала быть 0) — может смениться состав шкал «Сила сейчас» ниже (0.2.1).
+          // Перерисовывается только блок «Сила сейчас»: фокус на шкале и прокрутка не сбиваются.
+          onSet: (v) => {
+            e.before = v;
+            saveAbc();
+            keep.delete(e.name); // состав для этой эмоции считается заново
+            if (afterKey() !== shownAfterKey) after.update();
+            else if (afterEmotions(abc, keep).includes(e)) keep.add(e.name); // состав тот же — шкала по-прежнему показана
+          }
         }))
         : h('div', { class: 'caption indent', 'data-fk': 'strength-wait' }, T.step2.strengthWait));
 
     let hadE = !isBlank(abc.e_belief);
+    // Шкалы, уже показанные в этом показе шага (см. afterKeep). Другая ABC (выбрали другое событие) — с нуля.
+    let keepRec = afterKeep.get(date);
+    if (!keepRec || keepRec.abc !== abc) { keepRec = { abc, names: new Set() }; afterKeep.set(date, keepRec); }
+    const keep = keepRec.names;
+    // Состав шкал «Сила сейчас» (afterEligible: сила «в тот момент» не 0, плюс уже показанные) — по нему видно,
+    // нужно ли перерисовать блок после смены силы «в тот момент».
+    const afterKey = () => afterEmotions(abc, keep).map((e) => e.name).join('\n');
+    let shownAfterKey = null;
     // Блок «Сила сейчас» виден, как только выбраны эмоции (0.1.9): пока E пусто — заголовок и подпись-заглушка,
     // шкал нет (не появляются внезапно ниже поля E, за клавиатурой). Шкалы — когда E записано.
+    // С 0.2.1 — только для эмоций с силой «в тот момент» не 0; если таких нет, блока нет совсем.
     const after = region(() => {
-      if (!emotions.length) return null;
-      if (!afterOpen(abc)) {
+      const shown = afterEmotions(abc, keep);
+      keep.clear();
+      shown.forEach((e) => keep.add(e.name));
+      shownAfterKey = afterKey();
+      if (!shown.length) return null;
+      if (!afterOpen(abc, keep)) {
         return h('div', { id: 'after-block', class: 'stack-8 divider', 'data-state': 'wait' },
           h('div', { class: 'label' }, T.step2.afterTitle),
           h('div', { class: 'caption' }, T.step2.afterWait));
@@ -446,7 +474,7 @@ export function renderEvening(route) {
       // Прежнее значение («было 7») не показываем — ни в подписи, ни в aria.
       return h('div', { id: 'after-block', class: 'stack-12 divider' },
         h('div', { class: 'label' }, T.step2.afterTitle),
-        emotions.map((e) => strengthScale({
+        shown.map((e) => strengthScale({
           label: sliderLabel(e), value: e.after, ariaLabel: T.step2.afterAria(sliderLabel(e)), fk: `after-${e.name}`, emo: e.name,
           onSet: (v) => { e.after = v; save(); }
         })),
@@ -457,10 +485,10 @@ export function renderEvening(route) {
     // Если фокус ушёл на другой элемент (кнопку «Далее», шкалу, поле) — человек сам выбрал, куда идти: не уводим.
     // Пауза — чтобы успела убраться клавиатура и сменилась высота экрана. «Далее» не блокируется.
     const nudgeAfter = (e) => {
-      if (afterNudged.has(date) || !afterPending(abc) || (e && e.relatedTarget)) return;
+      if (afterNudged.has(date) || !afterPending(abc, keep) || (e && e.relatedTarget)) return;
       setTimeout(() => {
         const box = after.firstElementChild; // .region — display: contents, своей рамки нет
-        if (afterNudged.has(date) || !box || !box.isConnected || !afterPending(abc)) return;
+        if (afterNudged.has(date) || !box || !box.isConnected || !afterPending(abc, keep)) return;
         const act = document.activeElement;
         if (act && act !== document.body && act.matches('input, textarea')) return;
         afterNudged.add(date);
@@ -526,7 +554,8 @@ export function renderEvening(route) {
                 const hasE = !isBlank(abc.e_belief);
                 if (!hasE) emotions.forEach((x) => { x.after = null; });
                 save(true);
-                if (hasE !== hadE) { hadE = hasE; after.update(); }
+                // Появилось или стёрто E — состав «Сила сейчас» считается заново (0.2.1).
+                if (hasE !== hadE) { hadE = hasE; keep.clear(); after.update(); }
               },
               onBlur: nudgeAfter
             })),
@@ -634,6 +663,7 @@ export function renderEvening(route) {
     el,
     leave: () => {
       afterNudged.delete(date);
+      afterKeep.delete(date);
       if (checked) return null;
       const show = runCheck();
       if (parseRoute().name !== 'evening') endEdit();
