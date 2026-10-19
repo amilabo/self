@@ -429,12 +429,11 @@ export function renderEvening(route) {
     const otherLabel = () => (otherEmotion && !isBlank(otherEmotion.other_text) ? otherEmotion.other_text.trim() : OTHER);
     const sliderLabel = (e) => (e.name === OTHER ? otherLabel() : e.name);
 
-    // Сила «в тот момент» — отдельной карточкой после B (0.2.0): не разрывает цепочку «почувствовала → подумала».
-    // Пока эмоции не выбраны — подпись-заглушка вместо шкал.
-    const before = h('div', { class: 'stack-12', role: 'group', 'aria-labelledby': 'c-strength-title', 'data-state': emotions.length ? null : 'wait' },
-      h('div', { class: 'q-label', id: 'c-strength-title' }, badge('C'), T.step2.strengthTitle),
-      emotions.length
-        ? emotions.map((e) => strengthScale({
+    // Сила «в тот момент» — в карточке эмоций, сразу под выбранными (0.3.1, решение 2026-10-19); B — после.
+    // Пока эмоции не выбраны — блока нет.
+    const before = emotions.length ? h('div', { class: 'stack-12 divider', role: 'group', 'aria-labelledby': 'c-strength-title' },
+      h('div', { class: 'label', id: 'c-strength-title' }, T.step2.strengthTitle),
+      emotions.map((e) => strengthScale({
           label: sliderLabel(e), value: e.before, ariaLabel: T.step2.strengthAria(sliderLabel(e)), fk: `before-${e.name}`, emo: e.name,
           // Сила стала 0 (или перестала быть 0) — может смениться состав шкал «Сила сейчас» ниже (0.2.1).
           // Перерисовывается только блок «Сила сейчас»: фокус на шкале и прокрутка не сбиваются.
@@ -445,8 +444,7 @@ export function renderEvening(route) {
             if (afterKey() !== shownAfterKey) after.update();
             else if (afterEmotions(abc, keep).includes(e)) keep.add(e.name); // состав тот же — шкала по-прежнему показана
           }
-        }))
-        : h('div', { class: 'caption indent', 'data-fk': 'strength-wait' }, T.step2.strengthWait));
+        }))) : null;
 
     let hadE = !isBlank(abc.e_belief);
     // Шкалы, уже показанные в этом показе шага (см. afterKeep). Другая ABC (выбрали другое событие) — с нуля.
@@ -527,7 +525,8 @@ export function renderEvening(route) {
               // Подпись шкал «другое» — словами пользователя, сразу при наборе.
               document.querySelectorAll(`[data-emo="${OTHER}"]`).forEach((n) => { n.textContent = otherLabel(); });
             }
-          }) : null),
+          }) : null,
+          before),
 
         card('gap-8',
           h('div', { class: 'stack-4' },
@@ -535,11 +534,9 @@ export function renderEvening(route) {
             h('div', { id: 'b-hint', class: 'caption indent' }, T.step2.bHint)),
           textField({ id: 'b', value: abc.b_belief, placeholder: T.step2.bPh, rows: 2, describedby: 'b-hint', onInput: setText('b_belief') })),
 
-        card('gap-16',
-          before,
-          h('div', { class: 'stack-8 divider' },
-            h('label', { for: 'did', class: 'label' }, T.step2.behaviorQ),
-            textField({ id: 'did', value: abc.c_behavior, single: true, onInput: setText('c_behavior') }))),
+        card('gap-8',
+          h('label', { for: 'did', class: 'q-label' }, badge('C'), T.step2.behaviorQ),
+          textField({ id: 'did', value: abc.c_behavior, single: true, onInput: setText('c_behavior') })),
 
         card('dashed gap-16',
           h('div', { class: 'stack-8' },

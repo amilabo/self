@@ -85,7 +85,7 @@ a { color: var(--accent); }
 .caption { font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
 .meta { font-size: 14px; color: var(--text-secondary); }
 .label { font-size: 14px; line-height: 1.4; font-weight: 700; }
-[data-state="wait"] > .label, [data-state="wait"] > .q-label { color: var(--text-secondary); } /* ожидание: «Сила сейчас» до E, сила «в тот момент» до выбора эмоций; бейдж сохраняет свой цвет */
+[data-state="wait"] > .label, [data-state="wait"] > .q-label { color: var(--text-secondary); } /* ожидание: «Сила сейчас» до E; бейдж сохраняет свой цвет */
 .overline { font-size: 12px; line-height: 1.3; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .quote { font-size: 16px; line-height: 1.45; font-weight: 600; }
 .opt { flex: none; font-size: 13px; color: var(--text-secondary); }
