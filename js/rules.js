@@ -2,7 +2,7 @@
 // Чистые функции: принимают снимок данных (как S из store.js) и логическую дату,
 // ничего не пишут. Поэтому их можно проверять автотестами (tests/rules.test.mjs).
 
-import { addDays, diffDays, dayNumber, logicalDayStart, logicalDateOfIso, weekdayShort } from './dates.js';
+import { addDays, diffDays, dayNumber, logicalDayStart, logicalDateOfIso, weekdayShort, mondayOf } from './dates.js';
 import { EXPERIMENT_LENGTH, GOOD_LOW_MOOD_MAX, QUESTION_SET_VERSION, OTHER } from './content.js';
 
 // H1: вечер засчитан, если круг завершён или в нём было окно «Кризис».
@@ -194,16 +194,20 @@ export function editBase(ev) {
 }
 
 // Из правки вышли, не нажав «Завершить круг» (правки уже записаны): обязательные ответы
-// завершённого круга не должны пропасть. «Что мешало» без ответа — возвращается прежний ответ;
-// «другое» в эмоциях без уточнения — прежнее уточнение, а если его не было, «другое» снимается.
-// В вечер с «Кризисом» обязательных полей нет. Возвращает true, если что-то восстановлено.
+// завершённого круга не должны пропасть. «Что мешало» с 0.4.0 необязательно: пустой ответ остаётся пустым,
+// а «другое» без уточнения — возвращается прежний ответ, если его не было, «другое» снимается.
+// «Другое» в эмоциях без уточнения — так же. В вечер с «Кризисом» обязательных полей нет.
+// Возвращает true, если что-то восстановлено.
 export function restoreRequired(ev, base) {
   if (!ev || ev.completed_at == null || ev.crisis) return false;
   let fixed = false;
   const f = ev.friction;
-  const frictionBad = !f || !f.reasons.length || (f.reasons.includes(OTHER) && !nonEmpty(f.other_text));
-  if (frictionBad && base && base.friction) {
-    ev.friction = { reasons: [...base.friction.reasons], other_text: base.friction.other_text };
+  if (f && f.reasons.includes(OTHER) && !nonEmpty(f.other_text)) {
+    if (base && base.friction) ev.friction = { reasons: [...base.friction.reasons], other_text: base.friction.other_text };
+    else {
+      const reasons = f.reasons.filter((r) => r !== OTHER);
+      ev.friction = reasons.length ? { reasons, other_text: null } : null;
+    }
     fixed = true;
   }
   const emo = ev.abc && ev.abc.c_emotions;
@@ -221,27 +225,39 @@ export function lastExport(snap) {
   return snap.exports.length ? snap.exports[snap.exports.length - 1] : null;
 }
 
-// Недельное напоминание: due — наибольший из 7, 14, 21, не больше d. Карточка нужна, если
+// Недельное напоминание. Дни 1–21: due — наибольший из 7, 14, 21, не больше d. Карточка нужна, если
 // последний экспорт был раньше начала дня due − 1 (допуск: экспорт накануне засчитывается).
+// После дня 21 (регулярный режим, 0.4.0): экспорт — бэкап, карточка нужна, если с последнего
+// экспорта прошло 7 дней и больше или экспорта не было.
 export function exportDue(snap, day) {
+  if (!snap.experiment) return false;
+  if (day > EXPERIMENT_LENGTH) {
+    const last = lastExport(snap);
+    if (!last) return true;
+    const today = addDays(snap.experiment.start_date, day - 1);
+    return diffDays(today, logicalDateOfIso(last.at)) >= 7;
+  }
   const due = [21, 14, 7].find((n) => n <= day);
-  if (!due || !snap.experiment) return false;
+  if (!due) return false;
   const last = lastExport(snap);
   if (!last) return true;
   const dueMinus1 = addDays(snap.experiment.start_date, due - 2);
   return logicalDateOfIso(last.at) < dueMinus1;
 }
 
-// Неделя эксперимента (дни 1–7, 8–14, 15–21) для экрана «Сегодня».
+// Неделя для экрана «Сегодня». Дни 1–21 — неделя эксперимента (дни 1–7, 8–14, 15–21).
+// После дня 21 (регулярный режим, 0.4.0) — календарная неделя пн–вс, без номеров дней: regular = true.
 export function weekView(snap, today) {
   const start = snap.experiment.start_date;
   const day = dayNumber(today, start);
-  const weekNo = Math.min(3, Math.floor((day - 1) / 7) + 1);
-  const fromDay = (weekNo - 1) * 7 + 1;
+  const regular = day > EXPERIMENT_LENGTH;
+  const weekNo = regular ? null : Math.min(3, Math.floor((day - 1) / 7) + 1);
+  const fromDay = regular ? null : (weekNo - 1) * 7 + 1;
+  const first = regular ? mondayOf(today) : addDays(start, fromDay - 1);
   const dots = [];
   let count = 0;
   for (let i = 0; i < 7; i++) {
-    const date = addDays(start, fromDay - 1 + i);
+    const date = addDays(first, i);
     const counted = isCounted(snap.evenings.get(date));
     if (counted) count += 1;
     let state;
@@ -250,7 +266,13 @@ export function weekView(snap, today) {
     else state = 'future';
     dots.push({ date, label: weekdayShort(date), state, isToday: date === today });
   }
-  return { weekNo, fromDay, toDay: fromDay + 6, count, dots };
+  return { regular, weekNo, fromDay, toDay: regular ? null : fromDay + 6, count, dots };
+}
+
+// Итоговый экспорт к ретро ещё не сделан: нет экспорта начиная с дня 21 (экспорт в день 21 засчитывается).
+export function finalExportPending(snap) {
+  const last = lastExport(snap);
+  return !last || logicalDateOfIso(last.at) < addDays(snap.experiment.start_date, EXPERIMENT_LENGTH - 1);
 }
 
 // Засчитанные вечера дней 1–21 (для итоговой карточки).

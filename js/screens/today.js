@@ -4,7 +4,7 @@ import { h, card, button, icon, dock, linkCard } from '../ui.js';
 import { T, TODAY_HABIT_ORDER, GAD7, ELLIS } from '../content.js';
 import { S, markKey, setUi } from '../store.js';
 import { logicalDate, dayNumber, weekdayLong, dayMonth, timeOfIso } from '../dates.js';
-import { phaseOf, isCounted, exportDue, weekView, countedInExperiment } from '../rules.js';
+import { phaseOf, isCounted, exportDue, weekView, countedInExperiment, finalExportPending } from '../rules.js';
 import { isStandalone, canPromptInstall, promptInstall } from '../install.js';
 import { checkPersist } from '../actions.js';
 import { go, refresh, eveningHash, testHash, dayEventHash, reviewHash } from '../nav.js';
@@ -54,7 +54,7 @@ function testCards() {
   return cards;
 }
 
-function eveningCard(today, after) {
+function eveningCard(today) {
   const ev = S.evenings.get(today);
   const step = S.ui.evening_step && S.ui.evening_step.date === today ? S.ui.evening_step.step : 1;
   const open = () => go(eveningHash(today, ev ? step : 1));
@@ -75,14 +75,6 @@ function eveningCard(today, after) {
       actionLine(T.today.eveningBackToRecord));
   }
   const label = ev ? T.today.eveningContinue : T.today.eveningStart;
-  if (after) {
-    return card('',
-      h('div', { class: 'stack-4' },
-        h('div', { class: 'overline' }, T.today.eveningOverline),
-        h('div', { class: 'h3' }, T.today.eveningTitle),
-        h('div', { class: 'body-sm' }, T.today.eveningAfterText)),
-      button(label, open, { kind: 'secondary', fk: 'evening-start' }));
-  }
   return card('accent',
     h('div', { class: 'stack-4' },
       h('div', { class: 'overline' }, T.today.eveningOverline),
@@ -117,6 +109,16 @@ function installCard(today) {
       : [h('div', { class: 'body-sm' }, T.today.installFallback), button(T.common.later, later, { kind: 'secondary' })]);
 }
 
+// Итоговый экспорт к ретро — после дня 21, пока с дня 21 не было экспорта. Без «Позже»: это последний бэкап.
+function finalExportCard() {
+  return card('accent',
+    h('div', { class: 'stack-4' },
+      h('div', { class: 'overline' }, T.today.finalOverline),
+      h('h2', { class: 'h3' }, T.today.finalExportTitle),
+      h('div', { class: 'body-sm' }, T.today.finalExportText(countedInExperiment(S)))),
+    button(T.today.exportBtn, () => go('#/data'), { kind: 'on-accent' }));
+}
+
 function exportCard(today, day) {
   if (!exportDue(S, day) || S.ui.export_later === today) return null;
   return h('section', { class: 'card', 'aria-labelledby': 'export-title' },
@@ -146,7 +148,7 @@ function weekCard(today) {
   const w = weekView(S, today);
   return card('',
     h('div', { class: 'row-between' },
-      h('div', { class: 'title' }, T.today.weekTitle(w.weekNo, w.fromDay, w.toDay)),
+      h('div', { class: 'title' }, w.regular ? T.today.weekTitleRegular : T.today.weekTitle(w.weekNo, w.fromDay, w.toDay)),
       h('div', { class: 'body-sm' }, T.today.weekCount(w.count))),
     h('div', { class: 'week' }, w.dots.map((d) => h('div', { class: 'week-day' },
       h('div', { class: `dot ${d.state}` }, d.state === 'done' ? icon('check', 16, 3) : null),
@@ -176,33 +178,21 @@ export function renderToday() {
   const phase = phaseOf(day);
   const memoryWarn = S.memoryOnly ? card('warm', h('div', { class: 'body-sm' }, T.data.memoryOnly)) : null;
 
-  let body;
-  if (phase === 'after') {
-    body = [
-      card('accent',
-        h('div', { class: 'stack-4' },
-          h('div', { class: 'overline' }, T.today.finalOverline),
-          h('h2', { class: 'h3' }, T.today.finalExportTitle),
-          h('div', { class: 'body-sm' }, T.today.finalExportText(countedInExperiment(S)))),
-        button(T.today.exportBtn, () => go('#/data'), { kind: 'on-accent' })),
-      testCards(),
-      dayActions(),
-      eveningCard(today, true),
-      weekActionCard()
-    ];
-  } else {
-    body = [morningCard(today), testCards(), dayActions(), eveningCard(today, false), installCard(today), exportCard(today, day), weekActionCard(), weekCard(today), habitsBlock(today)];
-  }
+  // После дня 21 — регулярный режим (0.4.0, DECISIONS 2026-11-01): тот же экран, что в эксперименте,
+  // без номера дня; пока не сделан итоговый экспорт — карточка о нём вместо недельного напоминания.
+  const after = phase === 'after';
+  const exportPart = after && finalExportPending(S) ? finalExportCard() : exportCard(today, day);
+  const body = [morningCard(today), testCards(), dayActions(), eveningCard(today), installCard(today), exportPart, weekActionCard(), weekCard(today), habitsBlock(today)];
 
-  const meta = phase === 'after'
-    ? T.today.metaFinal(weekdayLong(today), dayMonth(today))
+  const meta = after
+    ? T.today.metaRegular(weekdayLong(today), dayMonth(today))
     : T.today.meta(weekdayLong(today), dayMonth(today), day);
 
   const content = h('main', { class: 'screen tab' },
     memoryWarn,
     h('div', { class: 'stack-4' },
       h('div', { class: 'meta' }, meta),
-      h('h1', { class: 'h1' }, phase === 'after' ? T.today.finalTitle : T.today.title)),
+      h('h1', { class: 'h1' }, T.today.title)),
     body);
   return { el: h('div', { class: 'page' }, content, dock('today')) };
 }

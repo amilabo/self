@@ -63,6 +63,11 @@ export function weekdayLong(ymd) {
   return WEEKDAYS[new Date(utcOf(ymd)).getUTCDay()];
 }
 
+// Понедельник календарной недели, в которую попадает дата (неделя пн–вс).
+export function mondayOf(ymd) {
+  return addDays(ymd, -((new Date(utcOf(ymd)).getUTCDay() + 6) % 7));
+}
+
 export function weekdayShort(ymd) {
   return WEEKDAYS_SHORT[new Date(utcOf(ymd)).getUTCDay()];
 }

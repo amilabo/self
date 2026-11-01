@@ -579,14 +579,13 @@ export function renderEvening(route) {
     const fr = ev.friction || { reasons: [], other_text: null };
     const otherOn = fr.reasons.includes(OTHER);
     const footer = region(() => {
+      // «Что мешало» с 0.4.0 необязательно (DECISIONS 2026-11-01); «другое» без уточнения по-прежнему просит текст.
       const f = ev.friction;
-      const frictionMissing = !crisis && !(f && f.reasons.length);
       const otherMissing = !crisis && !!f && f.reasons.includes(OTHER) && isBlank(f.other_text);
       return [
         editing ? null : hint(T.step3.autoNote),
-        frictionMissing ? hint(T.step3.needFriction) : null,
         otherMissing ? hint(T.step3.needOther) : null,
-        button(T.step3.finish, () => leaveStep('finish'), { large: true, disabled: frictionMissing || otherMissing, fk: 'finish' })
+        button(T.step3.finish, () => leaveStep('finish'), { large: true, disabled: otherMissing, fk: 'finish' })
       ];
     }, 'div', 'footer');
 
@@ -604,9 +603,9 @@ export function renderEvening(route) {
     };
 
     const service = crisis ? null : [
-      h('div', { class: 'card', role: 'group', 'aria-labelledby': 'friction-title', 'aria-describedby': 'friction-hint', 'aria-required': 'true' },
+      h('div', { class: 'card', role: 'group', 'aria-labelledby': 'friction-title', 'aria-describedby': 'friction-hint' },
         h('div', { class: 'stack-4' },
-          h('div', { id: 'friction-title', class: 'title' }, T.step3.frictionQ, reqStar()),
+          titleRow('friction-title', T.step3.frictionQ, { opt: true }),
           h('div', { id: 'friction-hint', class: 'caption' }, T.step3.frictionHint)),
         chips(FRICTION_OPTIONS, (n) => fr.reasons.includes(n), toggleFriction, 'fr'),
         otherOn ? otherField({
